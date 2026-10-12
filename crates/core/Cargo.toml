@@ -1,0 +1,13 @@
+[package]
+name = "nixos-control-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nixos-control-api-types = { path = "../api-types" }
+nixos-control-nix = { path = "../nix" }
+tokio.workspace = true
+
+[lints]
+workspace = true

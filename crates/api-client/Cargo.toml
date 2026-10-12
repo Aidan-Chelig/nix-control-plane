@@ -1,0 +1,15 @@
+[package]
+name = "nixos-control-api-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nixos-control-api-types = { path = "../api-types" }
+reqwest.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true

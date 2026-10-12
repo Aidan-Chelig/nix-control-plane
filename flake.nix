@@ -7,12 +7,11 @@
       url = "github:oxalica/rust-overlay";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
       };
     };
   };
   outputs =
-    {
+    inputs@{
       self,
       nixpkgs,
       flake-utils,
@@ -24,60 +23,56 @@
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs {
           inherit system overlays;
-          config.allowUnFree = true;
         };
-        # 👇 new! note that it refers to the path ./rust-toolchain.toml
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
       in
       with pkgs;
       {
-        devShells.default = mkShell {
-          shellHook = ''export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${
-            pkgs.lib.makeLibraryPath [
-              pkgs.alsa-lib
-              pkgs.udev
-              pkgs.vulkan-loader
-              pkgs.libxkbcommon
-              pkgs.wayland
-              pkgs.xdotool
-            ]
-          }"'';
+        formatter = nixfmt-tree;
 
-          # 👇 we can just use `rustToolchain` here:
-          buildInputs = [
+        packages = rec {
+          nixos-control = rustPlatform.buildRustPackage {
+            pname = "nixos-control";
+            version = "0.1.0";
+            src = self;
+            cargoLock.lockFile = ./Cargo.lock;
+            nativeBuildInputs = [ pkg-config ];
+            buildInputs = [ openssl ];
+          };
+          default = nixos-control;
+        };
+
+        apps.default = flake-utils.lib.mkApp {
+          drv = self.packages.${system}.nixos-control;
+          exePath = "/bin/nixos-control";
+        };
+
+        checks.package = self.packages.${system}.nixos-control;
+
+        devShells.default = mkShell {
+          packages = [
             rustToolchain
-            python3
             rust-analyzer
-            rustfmt
             cargo-edit
             cargo-watch
             pkg-config
-            alsa-lib
             lld
             clang
             just
-
-            udev
-            #lutris
-            bacon
-            bugstalker
-
-            #dioxus
             openssl
-            gdk-pixbuf
-            atk
-            pango
-            glib
-            dioxus-cli
-            gtk3
-            libsoup_3
-            webkitgtk_4_1
-            gtk4
-            xdotool
-
-
           ];
         };
       }
-    );
+    )
+    // {
+      nixosModules.default =
+        moduleArgs@{ pkgs, ... }:
+        import ./nix/modules (
+          moduleArgs
+          // {
+            package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+          }
+        );
+      nixosModules.nixos-control = self.nixosModules.default;
+    };
 }
