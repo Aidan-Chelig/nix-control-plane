@@ -1,0 +1,24 @@
+nixos-control/
+├── crates/
+│   ├── core/          # Domain logic
+│   ├── nix/           # Nix evaluation and inspection
+│   ├── api-types/     # Shared request/response models
+│   ├── api-client/    # Reusable Rust client SDK
+│   ├── daemon/        # Axum HTTP/WS server
+│   ├── privileged/    # Controlled system operations
+│   └── cli/           # Optional official CLI
+│
+├── apps/
+│   └── ui/            # Shared Dioxus application
+│       ├── src/
+│       │   ├── components/
+│       │   ├── pages/
+│       │   ├── services/
+│       │   └── main.rs
+│       └── Cargo.toml
+│
+├── nix/
+│   └── modules/
+│       └── default.nix
+│
+└── flake.nix

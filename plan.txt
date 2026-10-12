@@ -1,0 +1,261 @@
+NixOS Control Panel — Project Implementation Plan
+
+GOAL
+Build a self-hosted, Rust-based web interface for managing NixOS systems. Combine Nixdatifier-inspired generation history, flake updates, package diffs, health monitoring, and store management with declarative configuration editing, service management, and package installation.
+
+PRINCIPLES
+[ ] Keep Nix files as the source of truth
+[ ] Support flake-based and traditional NixOS configurations
+[ ] Never replace or silently rewrite user-managed files
+[ ] Separate declared, evaluated, built, and active system state
+[ ] Make all configuration changes reviewable and reversible
+[ ] Design core APIs for eventual multi-host support
+[ ] Prefer existing Nix commands and module evaluation over reimplementing Nix
+[ ] Use open-source dependencies and track their licenses
+
+PHASE 1 — PROJECT FOUNDATION
+[ ] Create Cargo workspace with core, server, privileged, and CLI crates
+[ ] Create frontend application
+[ ] Create Nix flake for development, builds, and packaging
+[ ] Add NixOS module exposing services.nixos-control.enable
+[ ] Add configurable listen address, port, state directory, and authentication
+[ ] Run server as an unprivileged systemd service
+[ ] Set up CI for formatting, clippy, tests, and builds
+[ ] Add architecture documentation and contributor guide
+
+PHASE 2 — NIXOS DISCOVERY AND EVALUATION
+[ ] Detect NixOS version and current system generation
+[ ] Detect flake-based versus traditional configuration
+[ ] Allow explicit configuration path, flake URI, and host selection
+[ ] Detect available Home Manager configurations where possible
+[ ] Wrap nix eval with structured JSON responses and process timeouts
+[ ] Query evaluated config values and option metadata
+[ ] Extract option types, descriptions, defaults, examples, and declaration locations
+[ ] Inspect module import graph and participating modules
+[ ] Track declared versus effective option definitions
+[ ] Handle evaluation failures and lazily evaluated or non-JSON Nix values
+[ ] Cache expensive evaluation results with invalidation on source changes
+[ ] Provide internal typed APIs for configuration queries
+[ ] Add fixture tests for flakes, non-flakes, and conflicting definitions
+
+PHASE 3 — READ-ONLY WEB INTERFACE
+[ ] Implement responsive layout and navigation
+[ ] Dashboard: NixOS version, active generation, uptime, health
+[ ] Searchable NixOS option explorer
+[ ] Option detail: type, description, effective value, default, and sources
+[ ] Installed package browser
+[ ] Distinguish explicitly installed packages from dependency closure entries
+[ ] Identify system versus Home Manager package ownership
+[ ] Services browser with configuration enable state and runtime systemd state
+[ ] Show option definitions and conflicting priorities
+[ ] Display clean errors for inaccessible or unevaluable options
+[ ] Add filtering and pagination for large option and package catalogs
+
+PHASE 4 — CONFIGURATION EDITING
+[ ] Define configuration ownership model
+[ ] Generate a dedicated managed Nix module
+[ ] Integrate managed module into the host configuration
+[ ] Preserve all unmanaged source files by default
+[ ] Create pending-change model independent of applied configuration
+[ ] Implement bool, integer, string, enum, and nullOr editors
+[ ] Implement list, attrset, and submodule editors
+[ ] Support package and path types with specialized controls
+[ ] Validate values against option metadata and Nix evaluation
+[ ] Preview generated Nix expressions and diffs
+[ ] Show source provenance and merging priorities
+[ ] Detect conflicting definitions and mkForce overrides
+[ ] Warn when removing managed definitions will not remove effective values
+[ ] Add direct-source editing using rnix as an advanced, opt-in capability
+[ ] Preserve comments and formatting where practical
+[ ] Prevent overwrites when configuration changes externally
+[ ] Add revision snapshots and undo for pending changes
+
+PHASE 5 — PACKAGE MANAGEMENT
+[ ] Search available packages for the selected nixpkgs revision
+[ ] Display package metadata, version, description, and availability
+[ ] Add packages to managed environment.systemPackages
+[ ] Remove packages owned by the managed configuration
+[ ] Show source locations for packages declared elsewhere
+[ ] Explain when a package remains installed via another declaration or dependency
+[ ] Support Home Manager packages when explicitly configured
+[ ] Support unfree package policy without bypassing evaluation restrictions
+[ ] Preview package additions, removals, and upgrades
+[ ] Show estimated closure differences when derivations are available
+[ ] Track package management operations in change history
+
+PHASE 6 — SERVICE MANAGEMENT
+[ ] Browse services with enable options
+[ ] Generate editors from NixOS option metadata
+[ ] Enable or disable services through managed configuration
+[ ] Expose common settings with typed forms
+[ ] Support advanced nested settings and custom Nix expressions
+[ ] Show evaluated service settings
+[ ] Display runtime status, logs, failed units, and restart counts
+[ ] Distinguish changing NixOS configuration from immediate systemd actions
+[ ] Identify dependencies and potential configuration conflicts
+[ ] Provide service-specific validation where useful
+
+PHASE 7 — BUILD, APPLY, AND ROLLBACK
+[ ] Create privileged helper with narrowly scoped operations
+[ ] Authenticate and authorize configuration changes
+[ ] Validate proposed generated configuration before writing
+[ ] Stage changes transactionally
+[ ] Run Nix evaluation and build checks
+[ ] Stream build progress and logs to browser
+[ ] Compare current and candidate system closures
+[ ] Offer build-only, test, switch, and boot actions
+[ ] Display expected generation changes before activation
+[ ] Require explicit confirmation for activation
+[ ] Record build inputs, outcomes, and configuration revisions
+[ ] Restore previous managed configuration on failed staging
+[ ] Implement rollback using known-good system generations
+[ ] Surface recovery instructions if activation interrupts network access
+[ ] Serialize concurrent rebuild and maintenance operations
+
+PHASE 8 — GENERATION HISTORY (NIXDATIFIER-INSPIRED)
+[ ] Discover NixOS system generations
+[ ] Display generation timeline with timestamps and versions
+[ ] Identify active, current-profile, and bootable generations
+[ ] Compare packages between generations
+[ ] Compare system closure sizes and store paths
+[ ] Show relevant Git commit and lockfile changes when available
+[ ] Associate generation with build logs and managed configuration revision
+[ ] Display generation details and diff views
+[ ] Support activation or rollback to previous generations
+[ ] Support safe generation deletion with explicit confirmation
+[ ] Protect active and required generations from deletion
+
+PHASE 9 — FLAKE MANAGEMENT
+[ ] Inspect flake inputs and flake.lock
+[ ] Display input revisions, timestamps, and origins
+[ ] Detect available updates
+[ ] Allow updating one input or selected inputs
+[ ] Generate candidate lockfile changes without replacing the original
+[ ] Show package and system differences after updates
+[ ] Build candidate configurations before applying
+[ ] Commit or restore lockfile updates transactionally
+[ ] Integrate with Git repositories without silently committing
+[ ] Handle dirty working trees and path-based flakes
+[ ] Avoid unsupported remote flake modification
+
+PHASE 10 — NIX STORE AND MAINTENANCE
+[ ] Display Nix store disk usage
+[ ] Show store paths grouped by generation and reference relationships
+[ ] Inspect GC roots and referrers
+[ ] Estimate reclaimable space
+[ ] Preview garbage collection impact
+[ ] Run explicitly authorized garbage collection
+[ ] Add generation retention policies
+[ ] Show Nix daemon and substituter information
+[ ] Display cache configuration and related failures
+[ ] Integrate maintenance actions into the activity log
+
+PHASE 11 — HEALTH AND MONITORING
+[ ] Display system uptime, kernel version, memory, disk, and CPU information
+[ ] Inspect failed systemd services
+[ ] Show relevant journal logs with filtering
+[ ] Monitor rebuild failures and evaluation failures
+[ ] Surface disk-space and boot-related warnings
+[ ] Show package update availability
+[ ] Distinguish runtime health problems from configuration evaluation errors
+[ ] Provide actionable links from warnings to configuration settings
+[ ] Add optional notification support
+
+PHASE 12 — HOME MANAGER
+[ ] Detect supported Home Manager integration modes
+[ ] Support NixOS-module and standalone Home Manager configurations
+[ ] Display Home Manager package and option state per user
+[ ] Respect per-user ownership and authorization
+[ ] Support editing managed Home Manager overlays
+[ ] Build and activate Home Manager changes separately when appropriate
+[ ] Provide Home Manager generation comparisons and rollback
+[ ] Avoid mixing system and user configuration permissions
+
+PHASE 13 — SECURITY HARDENING
+[ ] Bind to loopback by default
+[ ] Add authenticated browser sessions and CSRF protection
+[ ] Separate read-only users from configuration administrators
+[ ] Avoid executing arbitrary shell commands from API input
+[ ] Use strict authorization for privileged helper operations
+[ ] Ensure all filesystem paths are validated against configured roots
+[ ] Prevent symlink-based path escape and TOCTOU attacks
+[ ] Protect secrets and redact sensitive logs and option values
+[ ] Never serialize private configuration values without an explicit policy
+[ ] Add operation audit logging
+[ ] Rate-limit sensitive endpoints
+[ ] Add remote access guidance using a reverse proxy or VPN
+[ ] Document trust boundaries and known limitations
+[ ] Implement pluggable authentication architecture
+[ ] Support OpenID Connect (OIDC) SSO
+[ ] Implement Authorization Code Flow with PKCE
+[ ] Support OIDC discovery via .well-known/openid-configuration
+[ ] Validate ID tokens (issuer, audience, expiry, signature, nonce)
+[ ] Support automatic signing-key rotation through JWKS
+[ ] Support Authentik, Keycloak, Authelia, and other OIDC providers
+[ ] Support configurable client ID, issuer URL, and redirect URI
+[ ] Load client secrets from protected files or systemd credentials
+[ ] Never store authentication secrets in the Nix store
+[ ] Implement secure server-side sessions
+[ ] Support session expiration, renewal, and logout
+[ ] Implement CSRF protection and secure session cookies
+[ ] Support group-to-role mapping from OIDC claims
+[ ] Support read-only, operator, and administrator roles
+[ ] Enforce permissions on every backend API endpoint
+[ ] Restrict privileged rebuild operations to authorized administrators
+[ ] Support multiple configured OIDC identity providers
+[ ] Allow disabling password authentication entirely
+[ ] Provide optional local emergency administrator access
+[ ] Require explicit configuration for remote network access
+[ ] Maintain audit logs for authentication and privileged actions
+[ ] Document reverse proxy and HTTPS deployment
+[ ] Add automated authentication and authorization security tests
+
+PHASE 14 — MULTI-HOST SUPPORT
+[ ] Make host identity explicit in backend data models
+[ ] Separate local host operations from remote transport
+[ ] Define host inventory and capability discovery APIs
+[ ] Add authenticated remote agent or SSH-based backend
+[ ] Browse configurations and generations for multiple hosts
+[ ] Support host-specific changes and build targets
+[ ] Stream remote build and activation progress
+[ ] Support per-host authorization
+[ ] Add coordinated rollouts with failure handling
+[ ] Add fleet-wide package and configuration comparison
+
+TESTING
+[ ] Unit-test Nix expression generation and validation
+[ ] Test NixOS option metadata extraction across releases
+[ ] Test module priority and merging behavior
+[ ] Test package provenance and removal semantics
+[ ] Test transactional configuration writes
+[ ] Test rebuild cancellation and crash recovery
+[ ] Use NixOS VM tests for installation, activation, and rollback
+[ ] Test disconnected environments and failed substituters
+[ ] Test malformed inputs and permission boundaries
+[ ] Test browser workflows and accessibility
+
+MVP ACCEPTANCE CRITERIA
+[ ] Install with one imported NixOS module
+[ ] Access an authenticated local web interface
+[ ] Browse installed system packages and available service options
+[ ] See effective values and their declaration locations
+[ ] Enable a service and add a package through managed configuration
+[ ] Review a diff before building
+[ ] Build and activate a configuration through a controlled workflow
+[ ] Inspect generation history and roll back safely
+[ ] Never silently modify unmanaged configuration files
+[ ] Recover predictably from a failed build or interrupted operation
+
+FUTURE IDEAS
+[ ] Visual configuration provenance graph
+[ ] Configuration templates and presets
+[ ] GitOps workflows and pull-request generation
+[ ] Declarative scheduled maintenance
+[ ] Build-cache and binary-cache statistics
+[ ] Secrets-provider integrations
+[ ] Nix development shell management
+[ ] Container and virtual machine management
+[ ] Mobile-friendly administration dashboard
+[ ] External API and CLI client
+[ ] Plugin or extension framework
+[ ] Fleet-wide policy and configuration drift detection
