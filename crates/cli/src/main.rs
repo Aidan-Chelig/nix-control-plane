@@ -21,6 +21,7 @@ enum Command {
     Capabilities,
     Configuration,
     FlakeInputs,
+    RepositoryStatus,
     Generations,
     Generation { number: u64 },
     CompareGenerations { from: u64, to: u64 },
@@ -43,6 +44,7 @@ async fn main() -> Result<()> {
         Command::Capabilities => serde_json::to_value(client.capabilities().await?)?,
         Command::Configuration => serde_json::to_value(client.configuration().await?)?,
         Command::FlakeInputs => serde_json::to_value(client.flake_inputs().await?)?,
+        Command::RepositoryStatus => serde_json::to_value(client.repository_status().await?)?,
         Command::Generations => serde_json::to_value(client.generations().await?)?,
         Command::Generation { number } => serde_json::to_value(client.generation(number).await?)?,
         Command::CompareGenerations { from, to } => {

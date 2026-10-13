@@ -8,7 +8,7 @@ use axum::{
 use nixos_control_api_types::{
     API_VERSION, ApiError, CapabilityResponse, ConfigurationSummary, FlakeInputCatalog,
     GenerationCatalog, GenerationComparison, GenerationDetail, HealthResponse, HealthStatus,
-    ManagedConfigurationSummary, OptionCatalog, OptionDetail, PackageCatalog,
+    ManagedConfigurationSummary, OptionCatalog, OptionDetail, PackageCatalog, RepositoryStatus,
     RuntimeServiceCatalog, ServiceCatalog, ServiceDetail, SystemSummary,
 };
 use nixos_control_core::ControlPlane;
@@ -67,6 +67,7 @@ pub fn router(config: DaemonConfig) -> Router {
         )
         .route("/api/v1/configuration", get(configuration_summary))
         .route("/api/v1/flake/inputs", get(flake_inputs))
+        .route("/api/v1/repository/status", get(repository_status))
         .route(
             "/api/v1/configuration/managed",
             get(managed_configuration_summary),
@@ -160,10 +161,16 @@ async fn flake_inputs_page(State(state): State<AppState>) -> Html<String> {
         .control_plane
         .flake_inputs()
         .map_err(|error| error.to_string());
+    let repository = state
+        .control_plane
+        .repository_status()
+        .await
+        .map_err(|error| error.to_string());
     Html(nixos_control_ui::render_flake_inputs(
         &system,
         &configuration,
         inputs,
+        repository,
     ))
 }
 
@@ -383,6 +390,26 @@ async fn flake_inputs(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(ApiError {
                     code: "flake_lock_unavailable".to_owned(),
+                    message: error.to_string(),
+                    operation_id: None,
+                }),
+            )
+        })
+}
+
+async fn repository_status(
+    State(state): State<AppState>,
+) -> Result<Json<RepositoryStatus>, (StatusCode, Json<ApiError>)> {
+    state
+        .control_plane
+        .repository_status()
+        .await
+        .map(Json)
+        .map_err(|error| {
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ApiError {
+                    code: "repository_unavailable".to_owned(),
                     message: error.to_string(),
                     operation_id: None,
                 }),

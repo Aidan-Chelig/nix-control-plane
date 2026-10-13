@@ -136,6 +136,7 @@ PHASE 9 — FLAKE MANAGEMENT
 [ ] Build candidate configurations before applying
 [ ] Commit or restore lockfile updates transactionally
 [ ] Integrate with Git repositories without silently committing
+[x] Detect repository branch, revision, dirty state, and conflicts
 [ ] Handle dirty working trees and path-based flakes
 [ ] Avoid unsupported remote flake modification
 

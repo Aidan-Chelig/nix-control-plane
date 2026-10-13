@@ -34,6 +34,7 @@ The web dashboard and API listen on `127.0.0.1:9834` by default. Open
 - `GET /api/v1/configuration`
 - `GET /api/v1/configuration/managed`
 - `GET /api/v1/flake/inputs`
+- `GET /api/v1/repository/status`
 - `GET /api/v1/options`
 - `GET /api/v1/options/{option}`
 - `GET /api/v1/packages`
@@ -64,6 +65,9 @@ forced or approximated from source syntax.
 The Inputs page reads the selected local `flake.lock` and distinguishes direct
 inputs from transitive nodes while displaying pinned origins, revisions, content
 hashes, and timestamps. It never updates or rewrites the lock file.
+The same page reports the selected repository's Git branch, commit, upstream
+divergence, conflicts, and dirty-file counts without fetching or changing Git
+state.
 
 Expensive option, package, configured-service, and service-detail evaluations
 are cached in memory. Local flake targets passed with either

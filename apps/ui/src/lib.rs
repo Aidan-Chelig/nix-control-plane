@@ -2,8 +2,8 @@ use dioxus::prelude::*;
 use nixos_control_api_types::{
     ConfigurationKind, ConfigurationSummary, FlakeInputCatalog, GenerationCatalog,
     GenerationComparison, GenerationDetail, ManagedConfigurationMode, ManagedConfigurationSummary,
-    OptionCatalog, OptionDetail, PackageCatalog, RuntimeServiceCatalog, ServiceCatalog,
-    ServiceDetail, SystemSummary,
+    OptionCatalog, OptionDetail, PackageCatalog, RepositoryStatus, RuntimeServiceCatalog,
+    ServiceCatalog, ServiceDetail, SystemSummary,
 };
 
 const STYLES: &str = r"
@@ -330,6 +330,7 @@ pub fn render_flake_inputs(
     system: &SystemSummary,
     configuration: &ConfigurationSummary,
     catalog: Result<FlakeInputCatalog, String>,
+    repository: Result<RepositoryStatus, String>,
 ) -> String {
     let flake_uri = configuration.flake_uri.as_deref().unwrap_or("None");
     dioxus_ssr::render_element(rsx! {
@@ -350,6 +351,26 @@ pub fn render_flake_inputs(
             }
             section { class: "page-head", div { h1 { "Flake Inputs" } p { class: "lede", code { "{flake_uri}" } } } }
             section { class: "grid",
+                article { class: "card wide",
+                    match repository {
+                        Ok(repository) => {
+                            let branch = repository.branch.as_deref().unwrap_or("Detached HEAD");
+                            let head = repository.head.as_deref().unwrap_or("No commit");
+                            rsx! {
+                                div { class: "card-head", h2 { "Repository State" } span { class: "pill", if repository.dirty { "Dirty" } else { "Clean" } } }
+                                dl { class: "facts",
+                                    div { dt { "Branch" } dd { code { "{branch}" } } }
+                                    div { dt { "Commit" } dd { code { "{head}" } } }
+                                    div { dt { "Ahead / behind" } dd { "+{repository.ahead} / -{repository.behind}" } }
+                                    div { dt { "Staged" } dd { "{repository.staged}" } }
+                                    div { dt { "Modified" } dd { "{repository.modified}" } }
+                                    div { dt { "Untracked / conflicts" } dd { "{repository.untracked} / {repository.conflicted}" } }
+                                }
+                            }
+                        },
+                        Err(message) => rsx! { div { class: "error", "Repository state unavailable: {message}" } },
+                    }
+                }
                 article { class: "card options", style: "display: block",
                     match catalog {
                         Ok(catalog) => rsx! {

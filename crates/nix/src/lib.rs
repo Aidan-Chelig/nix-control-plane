@@ -142,6 +142,20 @@ pub struct FlakeInputCatalogInspection {
     pub inputs: Vec<FlakeInputInspection>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepositoryStatusInspection {
+    pub root: PathBuf,
+    pub branch: Option<String>,
+    pub head: Option<String>,
+    pub upstream: Option<String>,
+    pub ahead: u64,
+    pub behind: u64,
+    pub staged: usize,
+    pub modified: usize,
+    pub untracked: usize,
+    pub conflicted: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ManagedConfigurationMode {
     Unmanaged,
@@ -750,6 +764,77 @@ pub fn inspect_flake_inputs(
     })
 }
 
+/// Reads Git branch and working-tree state for the selected local configuration.
+///
+/// # Errors
+/// Returns an error when the target is not local or Git cannot inspect it.
+pub async fn inspect_repository_status(
+    command_timeout: Duration,
+    target: &ConfigurationTarget,
+) -> Result<RepositoryStatusInspection, InspectError> {
+    let root = inspect_configuration(target)
+        .source
+        .as_deref()
+        .and_then(Path::parent)
+        .ok_or(InspectError::UnsupportedConfiguration)?
+        .to_path_buf();
+    let mut command = Command::new("git");
+    command.args([
+        "-C",
+        &root.to_string_lossy(),
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "--untracked-files=normal",
+    ]);
+    let output = run_command(command_timeout, command).await?;
+    Ok(parse_repository_status(
+        root,
+        &String::from_utf8_lossy(&output.stdout),
+    ))
+}
+
+fn parse_repository_status(root: PathBuf, status: &str) -> RepositoryStatusInspection {
+    let mut inspected = RepositoryStatusInspection {
+        root,
+        branch: None,
+        head: None,
+        upstream: None,
+        ahead: 0,
+        behind: 0,
+        staged: 0,
+        modified: 0,
+        untracked: 0,
+        conflicted: 0,
+    };
+    for line in status.lines() {
+        if let Some(value) = line.strip_prefix("# branch.oid ") {
+            inspected.head = (value != "(initial)").then(|| value.to_owned());
+        } else if let Some(value) = line.strip_prefix("# branch.head ") {
+            inspected.branch = (value != "(detached)").then(|| value.to_owned());
+        } else if let Some(value) = line.strip_prefix("# branch.upstream ") {
+            inspected.upstream = Some(value.to_owned());
+        } else if let Some(value) = line.strip_prefix("# branch.ab ") {
+            for field in value.split_whitespace() {
+                if let Some(ahead) = field.strip_prefix('+') {
+                    inspected.ahead = ahead.parse().unwrap_or(0);
+                } else if let Some(behind) = field.strip_prefix('-') {
+                    inspected.behind = behind.parse().unwrap_or(0);
+                }
+            }
+        } else if line.starts_with("? ") {
+            inspected.untracked += 1;
+        } else if line.starts_with("u ") {
+            inspected.conflicted += 1;
+        } else if line.starts_with("1 ") || line.starts_with("2 ") {
+            let state = line.as_bytes().get(2..4).unwrap_or_default();
+            inspected.staged += usize::from(state.first().is_some_and(|value| *value != b'.'));
+            inspected.modified += usize::from(state.get(1).is_some_and(|value| *value != b'.'));
+        }
+    }
+    inspected
+}
+
 /// Inspects the reserved control-plane area without modifying the repository.
 #[must_use]
 pub fn inspect_managed_configuration(
@@ -1104,7 +1189,8 @@ mod tests {
     use super::{
         ConfigurationKind, ConfigurationTarget, InspectError, ManagedConfigurationMode,
         definition_is_control_plane_owned, inspect_configuration, inspect_flake_inputs,
-        inspect_generations_at, inspect_managed_configuration, select_host, store_path_name,
+        inspect_generations_at, inspect_managed_configuration, parse_repository_status,
+        select_host, store_path_name,
     };
 
     #[test]
@@ -1173,6 +1259,19 @@ mod tests {
         assert!(inspected.inputs[0].direct);
         assert_eq!(inspected.inputs[0].node, "nixpkgs");
         assert!(!inspected.inputs[1].direct);
+    }
+
+    #[test]
+    fn parses_git_porcelain_repository_state() {
+        let status = parse_repository_status(
+            std::path::PathBuf::from("/configuration"),
+            "# branch.oid abc123\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +2 -1\n1 M. N... file\n1 .M N... other\n? new\nu UU N... conflict\n",
+        );
+        assert_eq!(status.branch.as_deref(), Some("main"));
+        assert_eq!(status.upstream.as_deref(), Some("origin/main"));
+        assert_eq!((status.ahead, status.behind), (2, 1));
+        assert_eq!((status.staged, status.modified), (1, 1));
+        assert_eq!((status.untracked, status.conflicted), (1, 1));
     }
 
     #[test]

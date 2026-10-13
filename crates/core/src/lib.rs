@@ -3,7 +3,7 @@
 use nixos_control_api_types::{
     ConfigurationKind, ConfigurationSummary, FlakeInput, FlakeInputCatalog, GenerationCatalog,
     GenerationComparison, GenerationDetail, ManagedConfigurationMode, ManagedConfigurationSummary,
-    SystemGeneration, SystemSummary,
+    RepositoryStatus, SystemGeneration, SystemSummary,
 };
 use nixos_control_api_types::{
     OptionCatalog, OptionDetail, OptionSummary, PackageCatalog, RuntimeService,
@@ -226,6 +226,32 @@ impl ControlPlane {
             total: inputs.len(),
             direct: inputs.iter().filter(|input| input.direct).count(),
             inputs,
+        })
+    }
+
+    /// Reports Git state for the selected local configuration repository.
+    ///
+    /// # Errors
+    /// Returns an inspection error when the target is remote or Git fails.
+    pub async fn repository_status(&self) -> Result<RepositoryStatus, InspectError> {
+        let status = nixos_control_nix::inspect_repository_status(
+            self.command_timeout,
+            &self.configuration_target,
+        )
+        .await?;
+        let dirty = status.staged + status.modified + status.untracked + status.conflicted > 0;
+        Ok(RepositoryStatus {
+            root: status.root.to_string_lossy().into_owned(),
+            branch: status.branch,
+            head: status.head,
+            upstream: status.upstream,
+            ahead: status.ahead,
+            behind: status.behind,
+            staged: status.staged,
+            modified: status.modified,
+            untracked: status.untracked,
+            conflicted: status.conflicted,
+            dirty,
         })
     }
 

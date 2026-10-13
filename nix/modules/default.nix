@@ -80,6 +80,7 @@ in
       after = [ "network.target" ];
       path = [
         pkgs.nix
+        pkgs.gitMinimal
         pkgs.systemd
       ];
       serviceConfig = {

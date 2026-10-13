@@ -120,6 +120,21 @@ pub struct FlakeInputCatalog {
     pub inputs: Vec<FlakeInput>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepositoryStatus {
+    pub root: String,
+    pub branch: Option<String>,
+    pub head: Option<String>,
+    pub upstream: Option<String>,
+    pub ahead: u64,
+    pub behind: u64,
+    pub staged: usize,
+    pub modified: usize,
+    pub untracked: usize,
+    pub conflicted: usize,
+    pub dirty: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedConfigurationMode {
