@@ -20,9 +20,15 @@ enum Command {
     Health,
     Capabilities,
     Configuration,
+    Generations,
+    Generation { number: u64 },
+    ManagedConfiguration,
     Options,
+    Option { name: String },
     Packages,
     Services,
+    Service { name: String },
+    RuntimeServices,
     System,
 }
 
@@ -34,9 +40,17 @@ async fn main() -> Result<()> {
         Command::Health => serde_json::to_value(client.health().await?)?,
         Command::Capabilities => serde_json::to_value(client.capabilities().await?)?,
         Command::Configuration => serde_json::to_value(client.configuration().await?)?,
+        Command::Generations => serde_json::to_value(client.generations().await?)?,
+        Command::Generation { number } => serde_json::to_value(client.generation(number).await?)?,
+        Command::ManagedConfiguration => {
+            serde_json::to_value(client.managed_configuration().await?)?
+        }
         Command::Options => serde_json::to_value(client.options().await?)?,
+        Command::Option { name } => serde_json::to_value(client.option(&name).await?)?,
         Command::Packages => serde_json::to_value(client.packages().await?)?,
         Command::Services => serde_json::to_value(client.services().await?)?,
+        Command::Service { name } => serde_json::to_value(client.service(&name).await?)?,
+        Command::RuntimeServices => serde_json::to_value(client.runtime_services().await?)?,
         Command::System => serde_json::to_value(client.system_summary().await?)?,
     };
     println!("{}", serde_json::to_string_pretty(&value)?);

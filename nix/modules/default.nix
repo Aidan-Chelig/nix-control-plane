@@ -78,7 +78,10 @@ in
       description = "NixOS Control Plane";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
-      path = [ pkgs.nix ];
+      path = [
+        pkgs.nix
+        pkgs.systemd
+      ];
       serviceConfig = {
         ExecStart = lib.getExe' cfg.package "nixos-control-daemon";
         Restart = "on-failure";

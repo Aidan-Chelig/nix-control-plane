@@ -1,6 +1,7 @@
 use nixos_control_api_types::{
-    API_VERSION, ApiError, CapabilityResponse, ConfigurationSummary, HealthResponse, OptionCatalog,
-    PackageCatalog, ServiceCatalog, SystemSummary,
+    API_VERSION, ApiError, CapabilityResponse, ConfigurationSummary, GenerationCatalog,
+    GenerationDetail, HealthResponse, ManagedConfigurationSummary, OptionCatalog, OptionDetail,
+    PackageCatalog, RuntimeServiceCatalog, ServiceCatalog, ServiceDetail, SystemSummary,
 };
 use reqwest::StatusCode;
 use thiserror::Error;
@@ -60,6 +61,23 @@ impl Client {
         self.get(&format!("api/{API_VERSION}/system/summary")).await
     }
 
+    /// Fetches installed NixOS system profile generations.
+    ///
+    /// # Errors
+    /// Returns an error when the request fails or the response is invalid.
+    pub async fn generations(&self) -> Result<GenerationCatalog, ClientError> {
+        self.get(&format!("api/{API_VERSION}/generations")).await
+    }
+
+    /// Fetches closure metadata for one installed NixOS generation.
+    ///
+    /// # Errors
+    /// Returns an error when the generation is absent or the response is invalid.
+    pub async fn generation(&self, number: u64) -> Result<GenerationDetail, ClientError> {
+        self.get(&format!("api/{API_VERSION}/generations/{number}"))
+            .await
+    }
+
     /// Fetches the configured NixOS source and detected configuration kind.
     ///
     /// # Errors
@@ -68,12 +86,31 @@ impl Client {
         self.get(&format!("api/{API_VERSION}/configuration")).await
     }
 
+    /// Fetches the selected repository's control-plane ownership boundary.
+    ///
+    /// # Errors
+    /// Returns an error when the request fails or the response is invalid.
+    pub async fn managed_configuration(&self) -> Result<ManagedConfigurationSummary, ClientError> {
+        self.get(&format!("api/{API_VERSION}/configuration/managed"))
+            .await
+    }
+
     /// Fetches evaluated NixOS option metadata for the selected host.
     ///
     /// # Errors
     /// Returns an error when evaluation fails or the response is invalid.
     pub async fn options(&self) -> Result<OptionCatalog, ClientError> {
         self.get(&format!("api/{API_VERSION}/options")).await
+    }
+
+    /// Fetches evaluated metadata and values for one NixOS option.
+    ///
+    /// # Errors
+    /// Returns an error when evaluation fails or the response is invalid.
+    pub async fn option(&self, option: &str) -> Result<OptionDetail, ClientError> {
+        let option: String = url::form_urlencoded::byte_serialize(option.as_bytes()).collect();
+        self.get(&format!("api/{API_VERSION}/options/{option}"))
+            .await
     }
 
     /// Fetches evaluated packages from `environment.systemPackages`.
@@ -90,6 +127,25 @@ impl Client {
     /// Returns an error when evaluation fails or the response is invalid.
     pub async fn services(&self) -> Result<ServiceCatalog, ClientError> {
         self.get(&format!("api/{API_VERSION}/services")).await
+    }
+
+    /// Fetches option metadata for a configured service namespace.
+    ///
+    /// # Errors
+    /// Returns an error when evaluation fails or the response is invalid.
+    pub async fn service(&self, service: &str) -> Result<ServiceDetail, ClientError> {
+        let service: String = url::form_urlencoded::byte_serialize(service.as_bytes()).collect();
+        self.get(&format!("api/{API_VERSION}/services/{service}"))
+            .await
+    }
+
+    /// Fetches runtime systemd service states.
+    ///
+    /// # Errors
+    /// Returns an error when systemd inspection fails or the response is invalid.
+    pub async fn runtime_services(&self) -> Result<RuntimeServiceCatalog, ClientError> {
+        self.get(&format!("api/{API_VERSION}/runtime/services"))
+            .await
     }
 
     async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, ClientError> {

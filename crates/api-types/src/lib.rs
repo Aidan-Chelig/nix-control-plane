@@ -28,6 +28,39 @@ pub struct SystemSummary {
     pub hostname: String,
     pub nixos_version: Option<String>,
     pub current_system: Option<String>,
+    pub active_generation: Option<u64>,
+    pub kernel_version: Option<String>,
+    pub uptime_seconds: Option<u64>,
+    pub cpu_count: Option<usize>,
+    pub load_average: Option<String>,
+    pub memory_total_bytes: Option<u64>,
+    pub memory_available_bytes: Option<u64>,
+    pub root_disk_total_bytes: Option<u64>,
+    pub root_disk_available_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SystemGeneration {
+    pub generation: u64,
+    pub system_path: String,
+    pub nixos_version: Option<String>,
+    pub created_unix_seconds: Option<u64>,
+    pub current: bool,
+    pub active: bool,
+    pub bootable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GenerationCatalog {
+    pub total: usize,
+    pub generations: Vec<SystemGeneration>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GenerationDetail {
+    pub generation: SystemGeneration,
+    pub closure_size_bytes: u64,
+    pub store_path_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +80,26 @@ pub struct ConfigurationSummary {
     pub has_lock_file: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedConfigurationMode {
+    Unmanaged,
+    ManualWiring,
+    ControlPlaneManaged,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManagedConfigurationSummary {
+    pub repository_root: Option<String>,
+    pub managed_directory: Option<String>,
+    pub host: Option<String>,
+    pub host_module: Option<String>,
+    pub host_module_exists: bool,
+    pub metadata_exists: bool,
+    pub mode: ManagedConfigurationMode,
+    pub definitions_editable: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OptionSummary {
     pub name: String,
@@ -54,6 +107,20 @@ pub struct OptionSummary {
     pub option_type: Option<String>,
     pub read_only: bool,
     pub declarations: Vec<String>,
+    #[serde(default)]
+    pub current_value: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OptionDetail {
+    pub name: String,
+    pub description: Option<String>,
+    pub option_type: Option<String>,
+    pub read_only: bool,
+    pub declarations: Vec<String>,
+    pub current_value: Option<String>,
+    pub default_value: Option<String>,
+    pub example: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +140,29 @@ pub struct ServiceCatalog {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServiceDetail {
+    pub name: String,
+    pub options: Vec<OptionSummary>,
+    pub systemd_units: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeService {
+    pub unit: String,
+    pub description: String,
+    pub load_state: String,
+    pub active_state: String,
+    pub sub_state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeServiceCatalog {
+    pub total: usize,
+    pub failed: usize,
+    pub services: Vec<RuntimeService>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OptionCatalog {
     pub host: String,
     pub total: usize,
@@ -85,6 +175,7 @@ pub struct SystemPackage {
     pub version: Option<String>,
     pub description: Option<String>,
     pub store_path: String,
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,6 +183,7 @@ pub struct PackageCatalog {
     pub host: String,
     pub total: usize,
     pub packages: Vec<SystemPackage>,
+    pub sources: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
