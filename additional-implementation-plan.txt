@@ -1,24 +1,24 @@
 PHASE 1A — DAEMON AND MULTI-FRONTEND ARCHITECTURE
 
 ARCHITECTURE
-[ ] Design project around a headless, independently running daemon
-[ ] Keep all NixOS logic independent of frontend frameworks
+[x] Design project around a headless, independently running daemon
+[x] Keep all NixOS logic independent of frontend frameworks
 [ ] Make frontends interchangeable clients of the daemon
-[ ] Use Rust and Axum for the daemon's API server
-[ ] Design a versioned HTTP/JSON API
+[x] Use Rust and Axum for the daemon's API server
+[x] Design a versioned HTTP/JSON API
 [ ] Use WebSockets for live events, progress, and logs
 [ ] Publish an OpenAPI specification
-[ ] Generate a reusable Rust client SDK
-[ ] Make the API usable by non-Rust clients
+[x] Generate a reusable Rust client SDK
+[x] Make the API usable by non-Rust clients
 [ ] Support Unix sockets for local IPC
 [ ] Support optional authenticated TCP/HTTPS access
-[ ] Implement API capability discovery and version negotiation
+[x] Implement API capability discovery and version negotiation
 [ ] Standardize structured errors and operation identifiers
-[ ] Use strongly typed shared API models with serde
+[x] Use strongly typed shared API models with serde
 [ ] Ensure all clients follow identical authorization rules
 
 FRONTEND FRAMEWORK
-[ ] Use Dioxus for the official frontend
+[x] Use Dioxus for the official frontend
 [ ] Share UI components, routing, and business logic across platforms
 [ ] Build browser frontend using Dioxus Web/WASM
 [ ] Build native desktop client using Dioxus Desktop
@@ -28,28 +28,28 @@ FRONTEND FRAMEWORK
 [ ] Keep platform-specific logic behind adapter interfaces
 [ ] Support browser-based OIDC sign-in
 [ ] Support OIDC Authorization Code + PKCE for desktop clients
-[ ] Avoid duplicating Nix evaluation logic in frontend applications
+[x] Avoid duplicating Nix evaluation logic in frontend applications
 [ ] Allow web frontend hosting to be enabled or disabled independently
 
 DAEMON SERVICE
-[ ] Create dedicated daemon executable
-[ ] Implement NixOS module for installing and configuring daemon
-[ ] Run daemon under a dedicated unprivileged system user
+[x] Create dedicated daemon executable
+[x] Implement NixOS module for installing and configuring daemon
+[x] Run daemon under a dedicated unprivileged system user
 [ ] Separate privileged rebuild operations into a helper process
-[ ] Provide configurable API listeners
-[ ] Add structured logging, health checks, and graceful shutdown
+[x] Provide configurable API listeners
+[x] Add structured logging, health checks, and graceful shutdown
 [ ] Store persistent daemon state in a configurable state directory
 [ ] Support headless operation without any frontend installed
 [ ] Make configuration changes independent of client connections
 [ ] Persist long-running operation state and results
-[ ] Support multiple concurrent clients
+[x] Support multiple concurrent clients
 [ ] Serialize conflicting rebuild and maintenance operations
 
 THIRD-PARTY CLIENT SUPPORT
 [ ] Document authentication and API usage
 [ ] Publish API schemas and example requests
-[ ] Provide a Rust API client crate
-[ ] Provide CLI examples
+[x] Provide a Rust API client crate
+[x] Provide CLI examples
 [ ] Provide TUI integration examples using Ratatui
 [ ] Provide example clients in another programming language
 [ ] Document WebSocket event formats
@@ -60,7 +60,7 @@ THIRD-PARTY CLIENT SUPPORT
 
 DISTRIBUTION
 [ ] Support daemon-only NixOS installation
-[ ] Support daemon with bundled web frontend
+[x] Support daemon with bundled web frontend
 [ ] Package desktop client separately
 [ ] Support connecting desktop clients to remote hosts
 [ ] Package API client crate independently

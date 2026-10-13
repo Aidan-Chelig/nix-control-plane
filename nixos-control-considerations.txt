@@ -1,0 +1,384 @@
+NIXOS CONTROL DAEMON — ENGINEERING CONSIDERATIONS AND REUSABLE RESOURCES
+=======================================================================
+
+PROJECT CONTEXT
+---------------
+Build a headless Rust daemon for inspecting and managing NixOS systems through a
+versioned API. Official frontends share a Dioxus codebase for web and desktop;
+third parties should be able to build their own CLI, TUI, or other clients.
+Include configuration and package editing, service management, generations,
+flake updates, builds, health monitoring, store cleanup, and OIDC SSO.
+
+This is a research/architecture checklist, not a promise of compatibility.
+Verify APIs, maintenance status, supported Nix versions, and licenses before
+selecting a dependency. Prefer reuse over implementing equivalent machinery.
+
+CORE DESIGN RULES
+-----------------
+[x] Nix configuration files remain the source of truth.
+[ ] Separate declared, evaluated, built, and active state.
+[x] Never infer final values from syntax alone; use the NixOS module evaluator.
+[x] Keep the daemon independent of any frontend framework.
+[ ] Publish a stable, versioned HTTP/JSON API and event stream. (HTTP/JSON is
+    versioned; the event stream is not implemented yet.)
+[ ] Support Unix-socket local access and explicitly configured remote access.
+[x] Run the main daemon unprivileged; isolate system-changing operations.
+[x] Use a generated/managed Nix module first; make direct source editing opt-in.
+[x] Record provenance and ownership before attempting removal or mutation.
+[x] Prefer structured outputs and stable documented APIs over scraping text.
+[x] Wrap external commands behind adapters for future replacement.
+[ ] Audit dependencies for license, version compatibility, and maintenance.
+
+1. NIX EVALUATION, OPTIONS, AND SOURCE EDITING
+----------------------------------------------
+
+Nixpkgs module evaluator
+  https://github.com/NixOS/nixpkgs/blob/master/lib/modules.nix
+  Helps with: evaluating final options; descriptions, types, definitions,
+  module import graph, priorities/merging, and extending module configurations.
+  Integration: invoke through nix eval with purpose-built Nix expressions that
+  project suitable data to JSON. Do not try to serialize arbitrary functions,
+  derivations, or lazy values directly.
+  Consider: option metadata varies by type and version; protect secrets; large
+  evaluations should be cached and invalidated when sources change.
+
+Nix CLI / Nix reference documentation
+  https://nix.dev/manual/nix/latest/
+  Helps with: nix eval, flake metadata, nix build, store operations, profiles,
+  generations, structured build logs, and flake.lock handling.
+  Integration: subprocesses with sanitized arguments, timeouts, cancellation,
+  structured error reporting, and version-aware adapters.
+  Consider: flake commands and output conventions can differ by Nix version.
+
+rnix-parser / rnix
+  https://github.com/nix-community/rnix-parser
+  https://crates.io/crates/rnix
+  Helps with: lossless syntax parsing and source locations, inspecting
+  declarations, and eventual targeted edits while preserving comments.
+  Integration: Rust crate. Not an evaluator; cannot resolve imports, mkIf,
+  priorities, overlays, or final package selections on its own.
+
+Rowan
+  https://crates.io/crates/rowan
+  Helps with: lossless syntax trees and incremental syntax tooling under rnix.
+  Integration: typically transitively through rnix; use directly only if needed.
+
+nixfmt
+  https://github.com/NixOS/nixfmt
+  Helps with: formatting generated and edited Nix expressions.
+  Integration: command-line formatter after generating managed module files.
+
+statix
+  https://github.com/oppiliappan/statix
+  Helps with: linting Nix configuration and optional source diagnostics.
+  Integration: optional analysis tool, not a correctness validator.
+
+deadnix
+  https://github.com/astro/deadnix
+  Helps with: reporting unused bindings and dead expressions.
+  Integration: optional source diagnostics; don't auto-fix unmanaged files.
+
+2. PACKAGE AND OPTION SEARCH
+----------------------------
+
+nix search --json
+  https://nix.dev/manual/nix/latest/command-ref/new-cli/nix3-search
+  Helps with: finding available packages in a selected nixpkgs flake.
+  Integration: initial package search backend; cache by nixpkgs revision.
+  Consider: overlays/private packages and performance. Check whether the
+  selected evaluation context matches the machine's actual package set.
+
+nix-search-tv
+  https://github.com/3timeslazy/nix-search-tv
+  Helps with: search/index designs for packages and NixOS/Home Manager options.
+  Integration: assess indexes and generators for a local searchable catalog.
+  Consider: do not assume an external index matches pinned nixpkgs.
+
+nixos-search / flake-info
+  https://github.com/NixOS/nixos-search
+  Helps with: extracting package and option metadata for search.
+  Integration: reuse indexing ideas or data, but avoid deploying its full
+  search infrastructure for a single-host daemon unless necessary.
+
+optnix
+  https://github.com/nix-community/optnix
+  Helps with: option discovery patterns and searchable option documentation.
+  Integration: reference or optional companion tool.
+
+nix-index
+  https://github.com/nix-community/nix-index
+  Helps with: resolving which Nix package provides a file/command.
+  Integration: optional backend for 'which package provides this executable?'
+  Consider: this is not a general package catalog.
+
+nix-index-database
+  https://github.com/nix-community/nix-index-database
+  Helps with: prebuilt file-to-package indexes without local full indexing.
+  Integration: optional file-provider search backend.
+  Consider: prebuilt index revisions may not match a user's pinned nixpkgs.
+
+3. REBUILDS, GENERATIONS, CLOSURES, AND STORE MANAGEMENT
+-------------------------------------------------------
+
+nh
+  https://github.com/nix-community/nh
+  Helps with: established workflows for rebuilding, comparing generations,
+  and garbage collection.
+  Integration: study command orchestration and potentially call commands.
+  Consider: avoid layering too many wrappers when precise structured results
+  and lifecycle control are needed.
+
+nvd
+  https://github.com/nix-community/nvd
+  Helps with: comparing package changes between NixOS system generations.
+  Integration: subprocess adapter or reuse its algorithms if licensing permits.
+  Consider: terminal-oriented output may need an adapter; test parse stability.
+
+dix
+  https://github.com/manic-systems/dix
+  Helps with: fast closure differences between store paths.
+  Integration: candidate-vs-current system comparison adapter.
+
+nix-diff
+  https://github.com/Gabriella439/nix-diff
+  Helps with: explaining why two derivations differ.
+  Integration: optional advanced diagnostics when an update triggers rebuilds.
+
+nix-tree
+  https://github.com/utdemir/nix-tree
+  Helps with: dependency-tree exploration and store reference visualization.
+  Integration: learn from graph traversal and present graph data through API.
+
+nix-du
+  https://github.com/symphorien/nix-du
+  Helps with: store space attribution and GC-root-aware size exploration.
+  Integration: reference/companion tool for storage inspection.
+
+nix-output-monitor
+  https://github.com/maralorn/nix-output-monitor
+  Helps with: understanding and displaying Nix build progress and events.
+  Integration: use Nix structured internal-json events directly where feasible;
+  refer to nix-output-monitor's interpretation and rendering.
+  Consider: internal-json is not necessarily a public stable event contract.
+  Test across supported Nix releases; review current license before code reuse.
+
+Nix store and profile commands
+  https://nix.dev/manual/nix/latest/
+  Helps with: closure queries, referrers, roots, gc, profiles, build outcomes.
+  Integration: CLI abstraction first rather than low-level Nix C++ bindings.
+  Consider: GC deletion and generation deletion require explicit confirmation;
+  never confuse an unused package with a reclaimable store path.
+
+libnixstore (investigate cautiously, not MVP)
+  https://docs.rs/libnixstore
+  Helps with: possible Rust FFI access to Nix C++ store implementation.
+  Consider: unsafe FFI, compatibility burden, and potentially old supported
+  Nix versions. Prefer Nix CLI for initial implementation.
+
+4. SYSTEM SERVICES, LOGS, PRIVILEGES, AND SCHEDULING
+---------------------------------------------------
+
+systemd D-Bus interfaces
+  https://www.freedesktop.org/wiki/Software/systemd/dbus/
+  Helps with: listing units, status transitions, failures, authorized unit ops.
+  Integration: zbus; distinguish NixOS declarative enablement from whether a
+  systemd unit is running right now.
+
+zbus
+  https://docs.rs/zbus
+  Helps with: Rust-native D-Bus communication with systemd and related services.
+
+systemd journal / journalctl
+  https://www.freedesktop.org/software/systemd/man/latest/journalctl.html
+  Helps with: structured log retrieval and service diagnostics.
+  Integration: cursor-based, permission-aware log API; redact sensitive data.
+
+Polkit / zbus_polkit
+  https://www.freedesktop.org/software/polkit/docs/latest/
+  https://docs.rs/zbus_polkit
+  Helps with: authorization for particular local privileged operations.
+  Consider: remote OIDC identity != automatically authorized Polkit subject.
+  A narrowly constrained privileged helper may be simpler for v1.
+
+systemd credentials
+  https://systemd.io/CREDENTIALS/
+  Helps with: supplying OIDC client secrets and other runtime credentials
+  without embedding secrets in Nix derivations/store paths.
+
+systemd timers
+  https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html
+  Helps with: scheduled maintenance instead of inventing a scheduler.
+
+Git
+  https://git-scm.com/
+  Helps with: configuration source history, diffs, flake.lock revisions,
+  and rollback for managed files. Do not silently commit user changes.
+
+5. DAEMON API, SSO, SESSIONS, AND STORAGE
+----------------------------------------
+
+Axum
+  https://github.com/tokio-rs/axum
+  Helps with: Rust daemon HTTP routing, authentication middleware, and events.
+
+Tokio
+  https://tokio.rs/
+  Helps with: async subprocesses, connections, cancellation, and job handling.
+
+Serde
+  https://serde.rs/
+  Helps with: typed JSON API models and event serialization.
+
+openidconnect
+  https://docs.rs/openidconnect
+  Helps with: OIDC discovery, Authorization Code + PKCE, token and JWKS checks.
+  Integration: browser and native sign-in flows with appropriate callbacks.
+
+axum-login
+  https://docs.rs/axum-login
+  Helps with: session-oriented authentication integration for Axum.
+  Consider: validate integration with your OIDC/session design.
+
+tower-sessions
+  https://docs.rs/tower-sessions
+  Helps with: durable secure sessions and backend storage.
+
+utoipa + utoipa-axum
+  https://docs.rs/utoipa
+  https://docs.rs/utoipa-axum
+  Helps with: generating an OpenAPI specification from API models and routes.
+  Integration: publish OpenAPI and generate client SDKs or typed wrappers.
+
+reqwest
+  https://docs.rs/reqwest
+  Helps with: HTTP client for native frontend and Rust SDK.
+
+notify
+  https://docs.rs/notify
+  Helps with: detecting out-of-band configuration edits and cache invalidation.
+  Consider: filesystem watching is not enough for all flake inputs; revalidate
+  before staging/applying changes.
+
+rusqlite
+  https://docs.rs/rusqlite
+  Helps with: SQLite state for sessions, operations, revisions, and caches.
+  Keep Nix configuration authoritative; don't turn SQLite into a competing
+  configuration source.
+
+6. SHARED FRONTENDS AND THIRD-PARTY CLIENTS
+-------------------------------------------
+
+Dioxus
+  https://dioxuslabs.com/
+  Helps with: shared Rust component code for web and native desktop clients.
+  Integration: one UI crate, platform adapters for connection/auth/OS features.
+  Consider: desktop webview rendering, platform-specific OIDC callback handling,
+  and size/performance differences. API must not depend on Dioxus internals.
+
+Leptos (alternative to compare)
+  https://leptos.dev/
+  Helps with: Rust web UI and potential desktop shell integrations.
+  Consider: Dioxus looks more directly aligned with shared web+desktop output;
+  perform a short proof of concept rather than assume perfect code reuse.
+
+Ratatui
+  https://ratatui.rs/
+  Helps with: an example community/official Rust TUI using the public API.
+  Don't couple TUI consumers to the official UI crate.
+
+OpenAPI ecosystem
+  https://www.openapis.org/
+  Helps with: non-Rust clients, versioned compatibility, API exploration.
+  Integration: stable HTTP JSON plus WebSocket or SSE for build/log events.
+
+7. OTHER OPTIONAL TOOLS
+-----------------------
+
+nix-melt
+  https://github.com/nix-community/nix-melt
+  Helps with: visualizing changes and information in flake.lock.
+
+nix-init
+  https://github.com/nix-community/nix-init
+  Helps with: future package-authoring workflows, beyond MVP.
+
+treefmt-nix
+  https://github.com/numtide/treefmt-nix
+  Helps with: repository-wide developer formatting conventions.
+
+awesome-nix
+  https://github.com/nix-community/awesome-nix
+  Helps with: discovery of additional specialized Nix utilities.
+
+8. KEY ENGINEERING RISKS / DECISIONS
+------------------------------------
+
+[ ] Editing is harder than inspecting: priorities, mkIf, mkForce, lists,
+    submodules, imports, and external definitions affect effective values.
+[ ] Imported module != enabled service. Show both where meaningful.
+[ ] Package listed in a derivation closure != package explicitly installed.
+[ ] Removing a package from our overlay cannot remove one declared elsewhere.
+[ ] Home Manager standalone vs NixOS-module integrations differ significantly.
+[ ] A package catalog must match pinned nixpkgs/overlays when correctness matters.
+[ ] Build/test/boot/switch actions have different semantics and security impact.
+[ ] A build can succeed but a new running system can still be unhealthy.
+[ ] Avoid direct runtime systemd changes being misrepresented as persistent edits.
+[ ] Long-running rebuilds must survive UI disconnects and expose job IDs/status.
+[ ] Protect privileged operations with precise permissions and audit trails.
+[ ] OIDC SSO is not an automatic authorization mechanism for root operations.
+[ ] OIDC secrets, private options, and logs need strict handling/redaction.
+[ ] External command textual output and Nix internal-json may change by version.
+[ ] Generated managed configuration needs safe atomic writes and external-change
+    detection; consider Git worktrees and dirty source trees.
+[ ] Remote administration must be opt-in, authenticated, and TLS-protected.
+[ ] Confirm current licenses before vendoring code or reusing implementation.
+[ ] Use OS-level systemd/Nix capabilities where possible, not custom schedulers,
+    loggers, dependency graph implementations, or service managers.
+
+9. PROPOSED INITIAL TOOL STACK
+------------------------------
+
+Evaluation:        nix eval + Nixpkgs module system + small JSON exporter
+Source tooling:    rnix + nixfmt (statix optional)
+Package search:    nix search --json; index later if needed
+Build progress:    Nix structured event parser, informed by nix-output-monitor
+Generation diffs: nvd + dix initially
+Store:             nix store/profile/GC CLI adapters
+Services:          systemd D-Bus with zbus; journalctl/journald
+Daemon/API:        Axum + Tokio + Serde + utoipa
+SSO/sessions:      openidconnect + axum-login + tower-sessions
+Persistence:       SQLite via rusqlite
+Change detection:  notify + explicit revalidation
+UI:                Dioxus Web + Dioxus Desktop
+External clients:  OpenAPI spec + reusable Rust client SDK
+Privileged ops:    narrowly scoped helper; assess Polkit later
+
+10. PHASE ZERO — PROTOTYPES BEFORE COMMITTING TO DEPENDENCIES
+------------------------------------------------------------
+
+[x] Evaluate an actual flake NixOS configuration and export option metadata.
+[ ] Extract source definitions, priorities, and module import provenance.
+[ ] Test eval behavior with Home Manager and non-flake configurations.
+[ ] Inspect Nix config source with rnix; test comment-preserving edits.
+[ ] Test option/package search pinned to a specific nixpkgs revision.
+[ ] Compare two generated system closures using nvd and dix.
+[ ] Consume Nix structured build events from two supported Nix versions.
+[ ] Inspect store roots, references, and reclaimability using Nix CLI.
+[ ] Retrieve systemd unit state and events via zbus.
+[ ] Implement one OIDC provider login and verify RBAC enforcement.
+[ ] Generate and validate an OpenAPI spec from a minimal Axum service.
+[ ] Run Dioxus web and desktop builds against the exact same daemon API.
+[ ] Test one managed-module change through build, test, switch, and rollback.
+[ ] Review the license and security posture of each selected dependency.
+[ ] Record decisions: embed / subprocess / daemon integration / defer.
+
+HIGHEST-VALUE ORIGINAL WORK
+---------------------------
+1. A typed NixOS inspection adapter translating evaluated config and option
+   metadata into usable daemon models.
+2. A safe change engine that tracks ownership, provenance, merging semantics,
+   validation, candidate builds, and reversibility.
+3. A secure generalized daemon API with stable operations and live events,
+   usable equally by official and third-party clients.
+
+Everything else should start from existing Nix/Linux tools wherever possible.

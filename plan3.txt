@@ -1,0 +1,15 @@
+MANAGED CONFIGURATION OWNERSHIP
+
+[x] Use an `ncp/` directory at the root of the managed configuration repository
+[x] Store only nix-control-plane-owned modules and metadata under `ncp/`
+[x] Support per-host managed modules for multi-host repositories
+[x] Support manual host-module wiring without modifying unmanaged files
+[ ] Automatically manage wiring when the repository was created by nix-control-plane
+[x] Detect whether a definition is owned by nix-control-plane before allowing edits
+
+PACKAGE PROVENANCE
+
+[x] Discover the Nix inputs/channels available in the selected project
+[x] Determine package source input from evaluated source metadata without guessing
+[x] Show an All filter and one tag button per available input/channel
+[x] Show the source input/channel as a package-table column

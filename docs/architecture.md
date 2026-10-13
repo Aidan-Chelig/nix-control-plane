@@ -3,6 +3,12 @@
 The daemon is an independently deployable service. Frontends are clients and do
 not evaluate Nix themselves.
 
+The system distinguishes declared configuration, evaluated configuration,
+built closures/generations, and active runtime state. Not every layer exists in
+the initial read-only API; endpoints and UI labels must identify the layer they
+represent rather than collapsing them into a generic state. In particular,
+configured service enablement and live systemd status are independent.
+
 - `api-types` owns stable, serializable wire models.
 - `nix` contains narrow process and filesystem inspection adapters.
 - `core` contains frontend-independent application services.
@@ -26,3 +32,6 @@ surface accidentally.
 All external commands must be invoked with fixed executable names and arguments
 constructed by typed adapters, and must have timeouts. API input must never be
 passed to a shell.
+
+See [engineering-decisions.md](engineering-decisions.md) for dependency and
+integration decisions derived from the project research checklist.
