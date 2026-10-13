@@ -24,6 +24,8 @@ pub enum InspectError {
     HostRequired(String),
     #[error("option evaluation currently requires a flake configuration")]
     UnsupportedConfiguration,
+    #[error("the selected target does not have a readable local flake.lock")]
+    LockFileUnavailable,
     #[error("NixOS system generation {0} was not found")]
     GenerationNotFound(u64),
 }
@@ -117,6 +119,27 @@ pub struct ConfigurationInspection {
     pub flake_uri: Option<String>,
     pub host: Option<String>,
     pub has_lock_file: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlakeInputInspection {
+    pub node: String,
+    pub direct: bool,
+    pub input_type: Option<String>,
+    pub owner: Option<String>,
+    pub repo: Option<String>,
+    pub url: Option<String>,
+    pub reference: Option<String>,
+    pub revision: Option<String>,
+    pub nar_hash: Option<String>,
+    pub last_modified: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlakeInputCatalogInspection {
+    pub lock_file: PathBuf,
+    pub version: Option<u64>,
+    pub inputs: Vec<FlakeInputInspection>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -588,12 +611,14 @@ fn select_host(
 #[must_use]
 pub fn inspect_configuration(target: &ConfigurationTarget) -> ConfigurationInspection {
     if let Some(uri) = &target.flake_uri {
+        let path = Path::new(uri);
+        let local_root = path.is_dir().then_some(path);
         return ConfigurationInspection {
             kind: ConfigurationKind::Flake,
-            source: None,
+            source: local_root.map(|root| root.join("flake.nix")),
             flake_uri: Some(uri.clone()),
             host: target.host.clone(),
-            has_lock_file: false,
+            has_lock_file: local_root.is_some_and(|root| root.join("flake.lock").is_file()),
         };
     }
 
@@ -651,6 +676,78 @@ pub fn inspect_configuration(target: &ConfigurationTarget) -> ConfigurationInspe
             has_lock_file: false,
         }
     }
+}
+
+/// Parses pinned input metadata from a local flake lock file.
+///
+/// # Errors
+/// Returns an error when the target is remote, missing a lock file, or invalid JSON.
+pub fn inspect_flake_inputs(
+    target: &ConfigurationTarget,
+) -> Result<FlakeInputCatalogInspection, InspectError> {
+    let inspection = inspect_configuration(target);
+    let lock_file = inspection
+        .source
+        .as_deref()
+        .and_then(Path::parent)
+        .map(|root| root.join("flake.lock"))
+        .filter(|path| path.is_file())
+        .ok_or(InspectError::LockFileUnavailable)?;
+    let value: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&lock_file)?)?;
+    let nodes = value
+        .get("nodes")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| InspectError::Command("flake.lock has no nodes object".to_owned()))?;
+    let root_name = value
+        .get("root")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("root");
+    let direct_nodes = nodes
+        .get(root_name)
+        .and_then(|root| root.get("inputs"))
+        .and_then(serde_json::Value::as_object)
+        .into_iter()
+        .flat_map(|inputs| inputs.values())
+        .filter_map(serde_json::Value::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    let string = |value: &serde_json::Value, key| {
+        value
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    let mut inputs = nodes
+        .iter()
+        .filter(|(name, _)| name.as_str() != root_name)
+        .map(|(name, node)| {
+            let locked = node.get("locked").unwrap_or(&serde_json::Value::Null);
+            FlakeInputInspection {
+                node: name.clone(),
+                direct: direct_nodes.contains(name.as_str()),
+                input_type: string(locked, "type"),
+                owner: string(locked, "owner"),
+                repo: string(locked, "repo"),
+                url: string(locked, "url"),
+                reference: string(locked, "ref"),
+                revision: string(locked, "rev"),
+                nar_hash: string(locked, "narHash"),
+                last_modified: locked
+                    .get("lastModified")
+                    .and_then(serde_json::Value::as_u64),
+            }
+        })
+        .collect::<Vec<_>>();
+    inputs.sort_by(|left, right| {
+        right
+            .direct
+            .cmp(&left.direct)
+            .then(left.node.cmp(&right.node))
+    });
+    Ok(FlakeInputCatalogInspection {
+        lock_file,
+        version: value.get("version").and_then(serde_json::Value::as_u64),
+        inputs,
+    })
 }
 
 /// Inspects the reserved control-plane area without modifying the repository.
@@ -1006,8 +1103,8 @@ async fn run_command(duration: Duration, mut command: Command) -> Result<Output,
 mod tests {
     use super::{
         ConfigurationKind, ConfigurationTarget, InspectError, ManagedConfigurationMode,
-        definition_is_control_plane_owned, inspect_configuration, inspect_generations_at,
-        inspect_managed_configuration, select_host, store_path_name,
+        definition_is_control_plane_owned, inspect_configuration, inspect_flake_inputs,
+        inspect_generations_at, inspect_managed_configuration, select_host, store_path_name,
     };
 
     #[test]
@@ -1046,6 +1143,36 @@ mod tests {
         });
         assert_eq!(result.kind, ConfigurationKind::Flake);
         assert_eq!(result.flake_uri.as_deref(), Some("github:example/config"));
+    }
+
+    #[test]
+    fn reads_direct_and_transitive_flake_inputs() {
+        let temporary = tempfile::tempdir().unwrap();
+        std::fs::write(temporary.path().join("flake.nix"), "{}").unwrap();
+        std::fs::write(
+            temporary.path().join("flake.lock"),
+            r#"{
+              "version": 7,
+              "root": "root",
+              "nodes": {
+                "root": { "inputs": { "nixpkgs": "nixpkgs" } },
+                "nixpkgs": { "locked": { "type": "github", "owner": "NixOS", "repo": "nixpkgs", "rev": "abc", "narHash": "sha256-example", "lastModified": 123 } },
+                "systems": { "locked": { "type": "github", "owner": "nix-systems", "repo": "default", "rev": "def" } }
+              }
+            }"#,
+        )
+        .unwrap();
+        let inspected = inspect_flake_inputs(&ConfigurationTarget {
+            path: None,
+            flake_uri: Some(temporary.path().to_string_lossy().into_owned()),
+            host: None,
+        })
+        .unwrap();
+        assert_eq!(inspected.version, Some(7));
+        assert_eq!(inspected.inputs.len(), 2);
+        assert!(inspected.inputs[0].direct);
+        assert_eq!(inspected.inputs[0].node, "nixpkgs");
+        assert!(!inspected.inputs[1].direct);
     }
 
     #[test]

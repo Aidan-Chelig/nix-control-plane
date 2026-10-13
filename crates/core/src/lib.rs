@@ -1,9 +1,9 @@
 //! Frontend-independent application services.
 
 use nixos_control_api_types::{
-    ConfigurationKind, ConfigurationSummary, GenerationCatalog, GenerationComparison,
-    GenerationDetail, ManagedConfigurationMode, ManagedConfigurationSummary, SystemGeneration,
-    SystemSummary,
+    ConfigurationKind, ConfigurationSummary, FlakeInput, FlakeInputCatalog, GenerationCatalog,
+    GenerationComparison, GenerationDetail, ManagedConfigurationMode, ManagedConfigurationSummary,
+    SystemGeneration, SystemSummary,
 };
 use nixos_control_api_types::{
     OptionCatalog, OptionDetail, OptionSummary, PackageCatalog, RuntimeService,
@@ -196,6 +196,37 @@ impl ControlPlane {
             host: inspected.host,
             has_lock_file: inspected.has_lock_file,
         }
+    }
+
+    /// Reads pinned inputs from the selected local flake lock file.
+    ///
+    /// # Errors
+    /// Returns an inspection error for remote, absent, or malformed lock files.
+    pub fn flake_inputs(&self) -> Result<FlakeInputCatalog, InspectError> {
+        let inspected = nixos_control_nix::inspect_flake_inputs(&self.configuration_target)?;
+        let inputs = inspected
+            .inputs
+            .into_iter()
+            .map(|input| FlakeInput {
+                node: input.node,
+                direct: input.direct,
+                input_type: input.input_type,
+                owner: input.owner,
+                repo: input.repo,
+                url: input.url,
+                reference: input.reference,
+                revision: input.revision,
+                nar_hash: input.nar_hash,
+                last_modified: input.last_modified,
+            })
+            .collect::<Vec<_>>();
+        Ok(FlakeInputCatalog {
+            lock_file: inspected.lock_file.to_string_lossy().into_owned(),
+            version: inspected.version,
+            total: inputs.len(),
+            direct: inputs.iter().filter(|input| input.direct).count(),
+            inputs,
+        })
     }
 
     #[must_use]

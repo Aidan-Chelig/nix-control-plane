@@ -6,8 +6,8 @@ use axum::{
     routing::get,
 };
 use nixos_control_api_types::{
-    API_VERSION, ApiError, CapabilityResponse, ConfigurationSummary, GenerationCatalog,
-    GenerationComparison, GenerationDetail, HealthResponse, HealthStatus,
+    API_VERSION, ApiError, CapabilityResponse, ConfigurationSummary, FlakeInputCatalog,
+    GenerationCatalog, GenerationComparison, GenerationDetail, HealthResponse, HealthStatus,
     ManagedConfigurationSummary, OptionCatalog, OptionDetail, PackageCatalog,
     RuntimeServiceCatalog, ServiceCatalog, ServiceDetail, SystemSummary,
 };
@@ -55,6 +55,7 @@ pub fn router(config: DaemonConfig) -> Router {
             "/generations/{from}/compare/{to}",
             get(generation_comparison_page),
         )
+        .route("/inputs", get(flake_inputs_page))
         .route("/health", get(health))
         .route("/api", get(capabilities))
         .route("/api/v1/system/summary", get(system_summary))
@@ -65,6 +66,7 @@ pub fn router(config: DaemonConfig) -> Router {
             get(generation_comparison),
         )
         .route("/api/v1/configuration", get(configuration_summary))
+        .route("/api/v1/flake/inputs", get(flake_inputs))
         .route(
             "/api/v1/configuration/managed",
             get(managed_configuration_summary),
@@ -149,6 +151,20 @@ async fn runtime_page(State(state): State<AppState>) -> Html<String> {
 
 async fn generations_page(State(state): State<AppState>) -> Html<String> {
     render_page(state, nixos_control_ui::DashboardPage::Generations).await
+}
+
+async fn flake_inputs_page(State(state): State<AppState>) -> Html<String> {
+    let system = state.control_plane.system_summary().await;
+    let configuration = state.control_plane.configuration_summary();
+    let inputs = state
+        .control_plane
+        .flake_inputs()
+        .map_err(|error| error.to_string());
+    Html(nixos_control_ui::render_flake_inputs(
+        &system,
+        &configuration,
+        inputs,
+    ))
 }
 
 async fn generation_detail_page(
@@ -279,6 +295,7 @@ async fn capabilities() -> Json<CapabilityResponse> {
         capabilities: vec![
             "configuration-discovery".to_owned(),
             "generation-history".to_owned(),
+            "flake-input-inspection".to_owned(),
             "managed-configuration-ownership".to_owned(),
             "option-evaluation".to_owned(),
             "option-detail".to_owned(),
@@ -352,6 +369,25 @@ async fn generation_comparison(
 
 async fn configuration_summary(State(state): State<AppState>) -> Json<ConfigurationSummary> {
     Json(state.control_plane.configuration_summary())
+}
+
+async fn flake_inputs(
+    State(state): State<AppState>,
+) -> Result<Json<FlakeInputCatalog>, (StatusCode, Json<ApiError>)> {
+    state
+        .control_plane
+        .flake_inputs()
+        .map(Json)
+        .map_err(|error| {
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ApiError {
+                    code: "flake_lock_unavailable".to_owned(),
+                    message: error.to_string(),
+                    operation_id: None,
+                }),
+            )
+        })
 }
 
 async fn managed_configuration_summary(

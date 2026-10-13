@@ -127,8 +127,8 @@ PHASE 8 — GENERATION HISTORY (NIXDATIFIER-INSPIRED)
 [ ] Protect active and required generations from deletion
 
 PHASE 9 — FLAKE MANAGEMENT
-[ ] Inspect flake inputs and flake.lock
-[ ] Display input revisions, timestamps, and origins
+[x] Inspect flake inputs and flake.lock
+[x] Display input revisions, timestamps, and origins
 [ ] Detect available updates
 [ ] Allow updating one input or selected inputs
 [ ] Generate candidate lockfile changes without replacing the original

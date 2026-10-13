@@ -33,6 +33,7 @@ The web dashboard and API listen on `127.0.0.1:9834` by default. Open
 - `GET /api/v1/generations/{from}/compare/{to}`
 - `GET /api/v1/configuration`
 - `GET /api/v1/configuration/managed`
+- `GET /api/v1/flake/inputs`
 - `GET /api/v1/options`
 - `GET /api/v1/options/{option}`
 - `GET /api/v1/packages`
@@ -59,6 +60,10 @@ Opening an option detail evaluates that option lazily and displays its effective
 value, type, default, example, read-only status, and declaration sources. Values
 that cannot be represented safely as JSON remain unavailable rather than being
 forced or approximated from source syntax.
+
+The Inputs page reads the selected local `flake.lock` and distinguishes direct
+inputs from transitive nodes while displaying pinned origins, revisions, content
+hashes, and timestamps. It never updates or rewrites the lock file.
 
 Expensive option, package, configured-service, and service-detail evaluations
 are cached in memory. Local flake targets passed with either

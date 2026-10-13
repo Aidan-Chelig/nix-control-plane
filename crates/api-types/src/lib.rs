@@ -97,6 +97,29 @@ pub struct ConfigurationSummary {
     pub has_lock_file: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlakeInput {
+    pub node: String,
+    pub direct: bool,
+    pub input_type: Option<String>,
+    pub owner: Option<String>,
+    pub repo: Option<String>,
+    pub url: Option<String>,
+    pub reference: Option<String>,
+    pub revision: Option<String>,
+    pub nar_hash: Option<String>,
+    pub last_modified: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlakeInputCatalog {
+    pub lock_file: String,
+    pub version: Option<u64>,
+    pub total: usize,
+    pub direct: usize,
+    pub inputs: Vec<FlakeInput>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedConfigurationMode {

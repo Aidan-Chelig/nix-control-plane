@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 use nixos_control_api_types::{
-    ConfigurationKind, ConfigurationSummary, GenerationCatalog, GenerationComparison,
-    GenerationDetail, ManagedConfigurationMode, ManagedConfigurationSummary, OptionCatalog,
-    OptionDetail, PackageCatalog, RuntimeServiceCatalog, ServiceCatalog, ServiceDetail,
-    SystemSummary,
+    ConfigurationKind, ConfigurationSummary, FlakeInputCatalog, GenerationCatalog,
+    GenerationComparison, GenerationDetail, ManagedConfigurationMode, ManagedConfigurationSummary,
+    OptionCatalog, OptionDetail, PackageCatalog, RuntimeServiceCatalog, ServiceCatalog,
+    ServiceDetail, SystemSummary,
 };
 
 const STYLES: &str = r"
@@ -322,6 +322,70 @@ pub fn render_dashboard(page: DashboardPage, data: DashboardData) -> String {
     dioxus_ssr::render_element(rsx! {
         style { dangerous_inner_html: STYLES }
         Dashboard { page, data }
+    })
+}
+
+#[must_use]
+pub fn render_flake_inputs(
+    system: &SystemSummary,
+    configuration: &ConfigurationSummary,
+    catalog: Result<FlakeInputCatalog, String>,
+) -> String {
+    let flake_uri = configuration.flake_uri.as_deref().unwrap_or("None");
+    dioxus_ssr::render_element(rsx! {
+        style { dangerous_inner_html: STYLES }
+        a { class: "skip-link", href: "#main-content", "Skip to Main Content" }
+        main { class: "shell", id: "main-content",
+            header { class: "topbar",
+                a { class: "brand", href: "/", span { class: "mark", "N" } "NixOS Control Plane" }
+                nav { class: "nav", aria_label: "Dashboard sections",
+                    a { href: "/configuration", "Configuration" }
+                    a { href: "/packages", "Packages" }
+                    a { href: "/services", "Services" }
+                    a { href: "/runtime", "Runtime" }
+                    a { href: "/generations", "Generations" }
+                    a { class: "active", "aria-current": "page", href: "/inputs", "Inputs" }
+                }
+                div { class: "status", span { class: "dot" } "{system.hostname}" }
+            }
+            section { class: "page-head", div { h1 { "Flake Inputs" } p { class: "lede", code { "{flake_uri}" } } } }
+            section { class: "grid",
+                article { class: "card options", style: "display: block",
+                    match catalog {
+                        Ok(catalog) => rsx! {
+                            div { class: "card-head", h2 { "Pinned Inputs" } span { class: "pill", "{catalog.direct} direct / {catalog.total} nodes" } }
+                            p { class: "muted", "Lock file: " code { "{catalog.lock_file}" } }
+                            div { class: "option-list",
+                                for input in catalog.inputs {
+                                    {
+                                        let origin = match (&input.owner, &input.repo, &input.url) {
+                                            (Some(owner), Some(repo), _) => format!("{owner}/{repo}"),
+                                            (_, _, Some(url)) => url.clone(),
+                                            _ => "Origin unavailable".to_owned(),
+                                        };
+                                        let revision = input.revision.as_deref().or(input.reference.as_deref()).unwrap_or("Unpinned revision");
+                                        let input_type = input.input_type.as_deref().unwrap_or("unknown");
+                                        rsx! { details { class: "option",
+                                            summary { class: "entry-summary", code { class: "option-name", "{input.node}" } div { class: "option-description", if input.direct { "Direct · {origin}" } else { "Transitive · {origin}" } } }
+                                            div { class: "entry-body",
+                                                dl { class: "facts",
+                                                    div { dt { "Type" } dd { "{input_type}" } }
+                                                    div { dt { "Revision" } dd { code { "{revision}" } } }
+                                                    div { dt { "Last modified" } dd { if let Some(seconds) = input.last_modified { span { "data-unix-seconds": "{seconds}", "{seconds}" } } else { "Unavailable" } } }
+                                                }
+                                                if let Some(hash) = input.nar_hash { p { class: "muted", "Content hash" } code { "{hash}" } }
+                                            }
+                                        } }
+                                    }
+                                }
+                            }
+                            script { dangerous_inner_html: GENERATION_TIME_SCRIPT }
+                        },
+                        Err(message) => rsx! { div { class: "error", "Flake inputs unavailable: {message}" } },
+                    }
+                }
+            }
+        }
     })
 }
 
@@ -734,6 +798,7 @@ fn Dashboard(page: DashboardPage, data: DashboardData) -> Element {
                     a { class: if page == DashboardPage::Services { "active" } else { "" }, "aria-current": if page == DashboardPage::Services { "page" } else { "false" }, href: "/services", "Services" }
                     a { class: if page == DashboardPage::Runtime { "active" } else { "" }, "aria-current": if page == DashboardPage::Runtime { "page" } else { "false" }, href: "/runtime", "Runtime" }
                     a { class: if page == DashboardPage::Generations { "active" } else { "" }, "aria-current": if page == DashboardPage::Generations { "page" } else { "false" }, href: "/generations", "Generations" }
+                    a { href: "/inputs", "Inputs" }
                 }
                 div { class: "status", span { class: "dot" } "Daemon connected" }
             }

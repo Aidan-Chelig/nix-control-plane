@@ -1,8 +1,8 @@
 use nixos_control_api_types::{
-    API_VERSION, ApiError, CapabilityResponse, ConfigurationSummary, GenerationCatalog,
-    GenerationComparison, GenerationDetail, HealthResponse, ManagedConfigurationSummary,
-    OptionCatalog, OptionDetail, PackageCatalog, RuntimeServiceCatalog, ServiceCatalog,
-    ServiceDetail, SystemSummary,
+    API_VERSION, ApiError, CapabilityResponse, ConfigurationSummary, FlakeInputCatalog,
+    GenerationCatalog, GenerationComparison, GenerationDetail, HealthResponse,
+    ManagedConfigurationSummary, OptionCatalog, OptionDetail, PackageCatalog,
+    RuntimeServiceCatalog, ServiceCatalog, ServiceDetail, SystemSummary,
 };
 use reqwest::StatusCode;
 use thiserror::Error;
@@ -100,6 +100,14 @@ impl Client {
     /// Returns an error when the request fails or the response is invalid.
     pub async fn configuration(&self) -> Result<ConfigurationSummary, ClientError> {
         self.get(&format!("api/{API_VERSION}/configuration")).await
+    }
+
+    /// Fetches pinned inputs from the selected flake lock file.
+    ///
+    /// # Errors
+    /// Returns an error when inspection fails or the response is invalid.
+    pub async fn flake_inputs(&self) -> Result<FlakeInputCatalog, ClientError> {
+        self.get(&format!("api/{API_VERSION}/flake/inputs")).await
     }
 
     /// Fetches the selected repository's control-plane ownership boundary.
