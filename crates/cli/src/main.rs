@@ -22,6 +22,7 @@ enum Command {
     Configuration,
     Generations,
     Generation { number: u64 },
+    CompareGenerations { from: u64, to: u64 },
     ManagedConfiguration,
     Options,
     Option { name: String },
@@ -42,6 +43,9 @@ async fn main() -> Result<()> {
         Command::Configuration => serde_json::to_value(client.configuration().await?)?,
         Command::Generations => serde_json::to_value(client.generations().await?)?,
         Command::Generation { number } => serde_json::to_value(client.generation(number).await?)?,
+        Command::CompareGenerations { from, to } => {
+            serde_json::to_value(client.compare_generations(from, to).await?)?
+        }
         Command::ManagedConfiguration => {
             serde_json::to_value(client.managed_configuration().await?)?
         }

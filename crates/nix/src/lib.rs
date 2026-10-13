@@ -66,6 +66,24 @@ pub struct GenerationDetailInspection {
 #[serde(rename_all = "camelCase")]
 struct NixPathInfo {
     closure_size: u64,
+    nar_size: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StorePathDeltaInspection {
+    pub path: String,
+    pub name: String,
+    pub nar_size_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenerationComparisonInspection {
+    pub from_generation: u64,
+    pub to_generation: u64,
+    pub added_size_bytes: u64,
+    pub removed_size_bytes: u64,
+    pub added: Vec<StorePathDeltaInspection>,
+    pub removed: Vec<StorePathDeltaInspection>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -804,18 +822,7 @@ pub async fn inspect_generation_detail(
         .find(|generation| generation.generation == number)
         .ok_or(InspectError::GenerationNotFound(number))?;
     let system_path = generation.system_path.to_string_lossy().into_owned();
-    let mut command = Command::new("nix");
-    command.args([
-        "path-info",
-        "--json",
-        "--json-format",
-        "1",
-        "--closure-size",
-        "--recursive",
-        &system_path,
-    ]);
-    let output = run_command(command_timeout, command).await?;
-    let paths: BTreeMap<String, NixPathInfo> = serde_json::from_slice(&output.stdout)?;
+    let paths = query_closure(command_timeout, &system_path).await?;
     let closure_size_bytes = paths
         .get(&system_path)
         .map(|info| info.closure_size)
@@ -825,6 +832,78 @@ pub async fn inspect_generation_detail(
         closure_size_bytes,
         store_path_count: paths.len(),
     })
+}
+
+/// Compares the exact store closures of two installed generations.
+///
+/// # Errors
+/// Returns an error when either generation is absent or Nix cannot query it.
+pub async fn compare_generations(
+    command_timeout: Duration,
+    from: u64,
+    to: u64,
+) -> Result<GenerationComparisonInspection, InspectError> {
+    let generations = inspect_system_generations();
+    let find = |number| {
+        generations
+            .iter()
+            .find(|generation| generation.generation == number)
+            .ok_or(InspectError::GenerationNotFound(number))
+    };
+    let from_path = find(from)?.system_path.to_string_lossy().into_owned();
+    let to_path = find(to)?.system_path.to_string_lossy().into_owned();
+    let (from_paths, to_paths) = tokio::try_join!(
+        query_closure(command_timeout, &from_path),
+        query_closure(command_timeout, &to_path)
+    )?;
+    let collect = |paths: &BTreeMap<String, NixPathInfo>, other: &BTreeMap<String, NixPathInfo>| {
+        paths
+            .iter()
+            .filter(|(path, _)| !other.contains_key(*path))
+            .map(|(path, info)| StorePathDeltaInspection {
+                path: path.clone(),
+                name: store_path_name(path),
+                nar_size_bytes: info.nar_size,
+            })
+            .collect::<Vec<_>>()
+    };
+    let added = collect(&to_paths, &from_paths);
+    let removed = collect(&from_paths, &to_paths);
+    Ok(GenerationComparisonInspection {
+        from_generation: from,
+        to_generation: to,
+        added_size_bytes: added.iter().map(|path| path.nar_size_bytes).sum(),
+        removed_size_bytes: removed.iter().map(|path| path.nar_size_bytes).sum(),
+        added,
+        removed,
+    })
+}
+
+async fn query_closure(
+    command_timeout: Duration,
+    system_path: &str,
+) -> Result<BTreeMap<String, NixPathInfo>, InspectError> {
+    let mut command = Command::new("nix");
+    command.args([
+        "path-info",
+        "--json",
+        "--json-format",
+        "1",
+        "--closure-size",
+        "--recursive",
+        system_path,
+    ]);
+    let output = run_command(command_timeout, command).await?;
+    serde_json::from_slice(&output.stdout).map_err(InspectError::from)
+}
+
+fn store_path_name(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| name.split_once('-').map(|(_, name)| name))
+        .unwrap_or(path)
+        .to_owned()
 }
 
 fn inspect_generations_at(
@@ -928,7 +1007,7 @@ mod tests {
     use super::{
         ConfigurationKind, ConfigurationTarget, InspectError, ManagedConfigurationMode,
         definition_is_control_plane_owned, inspect_configuration, inspect_generations_at,
-        inspect_managed_configuration, select_host,
+        inspect_managed_configuration, select_host, store_path_name,
     };
 
     #[test]
@@ -1041,6 +1120,14 @@ mod tests {
         assert!(generations[0].current);
         assert!(generations[0].active);
         assert!(generations[0].bootable);
+    }
+
+    #[test]
+    fn extracts_readable_store_path_names() {
+        assert_eq!(
+            store_path_name("/nix/store/0123456789abcdefghijklmnopqrstuv-hello-1.0"),
+            "hello-1.0"
+        );
     }
 
     #[test]

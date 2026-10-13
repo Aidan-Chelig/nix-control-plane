@@ -1,7 +1,8 @@
 use nixos_control_api_types::{
     API_VERSION, ApiError, CapabilityResponse, ConfigurationSummary, GenerationCatalog,
-    GenerationDetail, HealthResponse, ManagedConfigurationSummary, OptionCatalog, OptionDetail,
-    PackageCatalog, RuntimeServiceCatalog, ServiceCatalog, ServiceDetail, SystemSummary,
+    GenerationComparison, GenerationDetail, HealthResponse, ManagedConfigurationSummary,
+    OptionCatalog, OptionDetail, PackageCatalog, RuntimeServiceCatalog, ServiceCatalog,
+    ServiceDetail, SystemSummary,
 };
 use reqwest::StatusCode;
 use thiserror::Error;
@@ -76,6 +77,21 @@ impl Client {
     pub async fn generation(&self, number: u64) -> Result<GenerationDetail, ClientError> {
         self.get(&format!("api/{API_VERSION}/generations/{number}"))
             .await
+    }
+
+    /// Compares exact store closures between two installed generations.
+    ///
+    /// # Errors
+    /// Returns an error when either generation is absent or inspection fails.
+    pub async fn compare_generations(
+        &self,
+        from: u64,
+        to: u64,
+    ) -> Result<GenerationComparison, ClientError> {
+        self.get(&format!(
+            "api/{API_VERSION}/generations/{from}/compare/{to}"
+        ))
+        .await
     }
 
     /// Fetches the configured NixOS source and detected configuration kind.

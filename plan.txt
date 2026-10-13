@@ -117,11 +117,11 @@ PHASE 8 — GENERATION HISTORY (NIXDATIFIER-INSPIRED)
 [x] Display generation timeline with timestamps and versions
 [x] Identify active, current-profile, and bootable generations
 [ ] Compare packages between generations
-[ ] Compare system closure sizes and store paths
+[x] Compare system closure sizes and store paths
 [ ] Show relevant Git commit and lockfile changes when available
 [ ] Associate generation with build logs and managed configuration revision
 [x] Display generation details
-[ ] Display generation diff views
+[x] Display generation diff views
 [ ] Support activation or rollback to previous generations
 [ ] Support safe generation deletion with explicit confirmation
 [ ] Protect active and required generations from deletion

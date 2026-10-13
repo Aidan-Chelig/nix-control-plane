@@ -30,6 +30,7 @@ The web dashboard and API listen on `127.0.0.1:9834` by default. Open
 - `GET /api/v1/system/summary`
 - `GET /api/v1/generations`
 - `GET /api/v1/generations/{generation}`
+- `GET /api/v1/generations/{from}/compare/{to}`
 - `GET /api/v1/configuration`
 - `GET /api/v1/configuration/managed`
 - `GET /api/v1/options`
@@ -44,7 +45,9 @@ count and load averages, memory availability, and root filesystem capacity.
 The Generations page lists installed system profile generations newest-first and
 distinguishes the running system, current profile, and bootable closures. Each
 generation has a lazy detail resource reporting its recursive closure size and
-store-path count; immutable detail results are cached in memory.
+store-path count. Generation comparisons report exact added and removed store
+paths and byte totals without mislabeling closure entries as installed packages.
+Immutable detail and comparison results are cached in memory.
 
 The daemon discovers `/etc/nixos/flake.nix` or `configuration.nix` by default.
 Use `--configuration-path`, or select a flake with `--flake-uri` and `--host`.

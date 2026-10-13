@@ -1,12 +1,14 @@
 //! Frontend-independent application services.
 
 use nixos_control_api_types::{
-    ConfigurationKind, ConfigurationSummary, GenerationCatalog, GenerationDetail,
-    ManagedConfigurationMode, ManagedConfigurationSummary, SystemGeneration, SystemSummary,
+    ConfigurationKind, ConfigurationSummary, GenerationCatalog, GenerationComparison,
+    GenerationDetail, ManagedConfigurationMode, ManagedConfigurationSummary, SystemGeneration,
+    SystemSummary,
 };
 use nixos_control_api_types::{
     OptionCatalog, OptionDetail, OptionSummary, PackageCatalog, RuntimeService,
-    RuntimeServiceCatalog, ServiceCatalog, ServiceDetail, ServiceSummary, SystemPackage,
+    RuntimeServiceCatalog, ServiceCatalog, ServiceDetail, ServiceSummary, StorePathDelta,
+    SystemPackage,
 };
 use nixos_control_nix::{ConfigurationTarget, InspectError, NixEvaluator};
 use std::{collections::HashMap, fmt::Write, path::Path, sync::Arc, time::Duration};
@@ -22,6 +24,7 @@ pub struct ControlPlane {
     service_cache: Arc<RwLock<Option<CachedServices>>>,
     service_detail_cache: Arc<RwLock<HashMap<String, CachedServiceDetail>>>,
     generation_detail_cache: Arc<RwLock<HashMap<u64, GenerationDetail>>>,
+    generation_comparison_cache: Arc<RwLock<HashMap<(u64, u64), GenerationComparison>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +69,7 @@ impl ControlPlane {
             service_cache: Arc::new(RwLock::new(None)),
             service_detail_cache: Arc::new(RwLock::new(HashMap::new())),
             generation_detail_cache: Arc::new(RwLock::new(HashMap::new())),
+            generation_comparison_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -135,6 +139,45 @@ impl ControlPlane {
             .await
             .insert(number, detail.clone());
         Ok(detail)
+    }
+
+    /// Compares exact store closure membership between two generations.
+    ///
+    /// # Errors
+    /// Returns an inspection error when either generation is absent or Nix fails.
+    pub async fn compare_generations(
+        &self,
+        from: u64,
+        to: u64,
+    ) -> Result<GenerationComparison, InspectError> {
+        if let Some(comparison) = self
+            .generation_comparison_cache
+            .read()
+            .await
+            .get(&(from, to))
+        {
+            return Ok(comparison.clone());
+        }
+        let comparison =
+            nixos_control_nix::compare_generations(self.command_timeout, from, to).await?;
+        let convert = |path: nixos_control_nix::StorePathDeltaInspection| StorePathDelta {
+            path: path.path,
+            name: path.name,
+            nar_size_bytes: path.nar_size_bytes,
+        };
+        let comparison = GenerationComparison {
+            from_generation: comparison.from_generation,
+            to_generation: comparison.to_generation,
+            added_size_bytes: comparison.added_size_bytes,
+            removed_size_bytes: comparison.removed_size_bytes,
+            added: comparison.added.into_iter().map(convert).collect(),
+            removed: comparison.removed.into_iter().map(convert).collect(),
+        };
+        self.generation_comparison_cache
+            .write()
+            .await
+            .insert((from, to), comparison.clone());
+        Ok(comparison)
     }
 
     #[must_use]

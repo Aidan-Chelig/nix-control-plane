@@ -63,6 +63,23 @@ pub struct GenerationDetail {
     pub store_path_count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StorePathDelta {
+    pub path: String,
+    pub name: String,
+    pub nar_size_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GenerationComparison {
+    pub from_generation: u64,
+    pub to_generation: u64,
+    pub added_size_bytes: u64,
+    pub removed_size_bytes: u64,
+    pub added: Vec<StorePathDelta>,
+    pub removed: Vec<StorePathDelta>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigurationKind {

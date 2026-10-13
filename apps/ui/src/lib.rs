@@ -1,8 +1,9 @@
 use dioxus::prelude::*;
 use nixos_control_api_types::{
-    ConfigurationKind, ConfigurationSummary, GenerationCatalog, GenerationDetail,
-    ManagedConfigurationMode, ManagedConfigurationSummary, OptionCatalog, OptionDetail,
-    PackageCatalog, RuntimeServiceCatalog, ServiceCatalog, ServiceDetail, SystemSummary,
+    ConfigurationKind, ConfigurationSummary, GenerationCatalog, GenerationComparison,
+    GenerationDetail, ManagedConfigurationMode, ManagedConfigurationSummary, OptionCatalog,
+    OptionDetail, PackageCatalog, RuntimeServiceCatalog, ServiceCatalog, ServiceDetail,
+    SystemSummary,
 };
 
 const STYLES: &str = r"
@@ -359,6 +360,78 @@ pub fn render_generation_detail(
     })
 }
 
+#[must_use]
+pub fn render_generation_comparison(
+    system: SystemSummary,
+    comparison: Result<GenerationComparison, String>,
+) -> String {
+    dioxus_ssr::render_element(rsx! {
+        style { dangerous_inner_html: STYLES }
+        GenerationComparisonPage { system, comparison }
+    })
+}
+
+#[component]
+fn GenerationComparisonPage(
+    system: SystemSummary,
+    comparison: Result<GenerationComparison, String>,
+) -> Element {
+    rsx! {
+        a { class: "skip-link", href: "#main-content", "Skip to Main Content" }
+        main { class: "shell", id: "main-content",
+            header { class: "topbar",
+                a { class: "brand", href: "/", span { class: "mark", "N" } "NixOS Control Plane" }
+                nav { class: "nav", aria_label: "Dashboard sections",
+                    a { href: "/configuration", "Configuration" }
+                    a { href: "/packages", "Packages" }
+                    a { href: "/services", "Services" }
+                    a { href: "/runtime", "Runtime" }
+                    a { class: "active", "aria-current": "page", href: "/generations", "Generations" }
+                }
+                div { class: "status", span { class: "dot" } "{system.hostname}" }
+            }
+            section { class: "page-head", div {
+                a { class: "muted", href: "/generations", "← System Generations" }
+                h1 { "Generation Comparison" }
+                p { class: "lede", "Exact recursive store closure delta" }
+            } }
+            match comparison {
+                Ok(comparison) => {
+                    let added_size = format_bytes(comparison.added_size_bytes);
+                    let removed_size = format_bytes(comparison.removed_size_bytes);
+                    rsx! { section { class: "grid",
+                        article { class: "card wide",
+                            div { class: "card-head", h2 { "Generation {comparison.from_generation} → {comparison.to_generation}" } span { class: "pill", "Closure diff" } }
+                            dl { class: "facts",
+                                div { dt { "Added" } dd { "{comparison.added.len()} paths · {added_size}" } }
+                                div { dt { "Removed" } dd { "{comparison.removed.len()} paths · {removed_size}" } }
+                                div { dt { "Net path change" } dd { "{comparison.added.len() as i64 - comparison.removed.len() as i64}" } }
+                            }
+                        }
+                        article { class: "card options",
+                            div { class: "card-head", h2 { "Added Store Paths" } span { class: "pill", "{comparison.added.len()}" } }
+                            div { class: "option-list",
+                                for path in comparison.added.iter().take(500) {
+                                    details { class: "option", summary { class: "entry-summary", code { class: "option-name", "{path.name}" } div { class: "option-description", "{format_bytes(path.nar_size_bytes)}" } } div { class: "entry-body", code { "{path.path}" } } }
+                                }
+                            }
+                        }
+                        article { class: "card options",
+                            div { class: "card-head", h2 { "Removed Store Paths" } span { class: "pill", "{comparison.removed.len()}" } }
+                            div { class: "option-list",
+                                for path in comparison.removed.iter().take(500) {
+                                    details { class: "option", summary { class: "entry-summary", code { class: "option-name", "{path.name}" } div { class: "option-description", "{format_bytes(path.nar_size_bytes)}" } } div { class: "entry-body", code { "{path.path}" } } }
+                                }
+                            }
+                        }
+                    } }
+                },
+                Err(message) => rsx! { section { class: "error", "Generation comparison unavailable: {message}" } },
+            }
+        }
+    }
+}
+
 #[component]
 fn GenerationDetailPage(
     system: SystemSummary,
@@ -600,6 +673,7 @@ fn Dashboard(page: DashboardPage, data: DashboardData) -> Element {
     let generation = system
         .active_generation
         .map_or_else(|| "Unavailable".to_owned(), |value| value.to_string());
+    let active_generation_number = system.active_generation;
     let kernel = system.kernel_version.as_deref().unwrap_or("Unavailable");
     let uptime = system
         .uptime_seconds
@@ -871,6 +945,10 @@ fn Dashboard(page: DashboardPage, data: DashboardData) -> Element {
                                                     div { dt { "System path" } dd { code { "{generation.system_path}" } } }
                                                 }
                                                 a { class: "detail-link", href: "/generations/{generation.generation}", "View Generation Details" }
+                                                if let Some(active) = active_generation_number.filter(|active| *active != generation.generation) {
+                                                    " · "
+                                                    a { class: "detail-link", href: "/generations/{generation.generation}/compare/{active}", "Compare with Active" }
+                                                }
                                             }
                                         }
                                     }

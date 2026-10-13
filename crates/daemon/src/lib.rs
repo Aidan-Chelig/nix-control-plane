@@ -7,9 +7,9 @@ use axum::{
 };
 use nixos_control_api_types::{
     API_VERSION, ApiError, CapabilityResponse, ConfigurationSummary, GenerationCatalog,
-    GenerationDetail, HealthResponse, HealthStatus, ManagedConfigurationSummary, OptionCatalog,
-    OptionDetail, PackageCatalog, RuntimeServiceCatalog, ServiceCatalog, ServiceDetail,
-    SystemSummary,
+    GenerationComparison, GenerationDetail, HealthResponse, HealthStatus,
+    ManagedConfigurationSummary, OptionCatalog, OptionDetail, PackageCatalog,
+    RuntimeServiceCatalog, ServiceCatalog, ServiceDetail, SystemSummary,
 };
 use nixos_control_core::ControlPlane;
 use nixos_control_nix::{ConfigurationTarget, InspectError};
@@ -51,11 +51,19 @@ pub fn router(config: DaemonConfig) -> Router {
         .route("/runtime", get(runtime_page))
         .route("/generations", get(generations_page))
         .route("/generations/{generation}", get(generation_detail_page))
+        .route(
+            "/generations/{from}/compare/{to}",
+            get(generation_comparison_page),
+        )
         .route("/health", get(health))
         .route("/api", get(capabilities))
         .route("/api/v1/system/summary", get(system_summary))
         .route("/api/v1/generations", get(generations))
         .route("/api/v1/generations/{generation}", get(generation_detail))
+        .route(
+            "/api/v1/generations/{from}/compare/{to}",
+            get(generation_comparison),
+        )
         .route("/api/v1/configuration", get(configuration_summary))
         .route(
             "/api/v1/configuration/managed",
@@ -154,6 +162,21 @@ async fn generation_detail_page(
         .await
         .map_err(|error| error.to_string());
     Html(nixos_control_ui::render_generation_detail(system, detail))
+}
+
+async fn generation_comparison_page(
+    State(state): State<AppState>,
+    Path((from, to)): Path<(u64, u64)>,
+) -> Html<String> {
+    let system = state.control_plane.system_summary().await;
+    let comparison = state
+        .control_plane
+        .compare_generations(from, to)
+        .await
+        .map_err(|error| error.to_string());
+    Html(nixos_control_ui::render_generation_comparison(
+        system, comparison,
+    ))
 }
 
 async fn render_page(state: AppState, page: nixos_control_ui::DashboardPage) -> Html<String> {
@@ -294,6 +317,32 @@ async fn generation_detail(
                 status,
                 Json(ApiError {
                     code: code.to_owned(),
+                    message: error.to_string(),
+                    operation_id: None,
+                }),
+            )
+        })
+}
+
+async fn generation_comparison(
+    State(state): State<AppState>,
+    Path((from, to)): Path<(u64, u64)>,
+) -> Result<Json<GenerationComparison>, (StatusCode, Json<ApiError>)> {
+    state
+        .control_plane
+        .compare_generations(from, to)
+        .await
+        .map(Json)
+        .map_err(|error| {
+            let status = if matches!(error, InspectError::GenerationNotFound(_)) {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::SERVICE_UNAVAILABLE
+            };
+            (
+                status,
+                Json(ApiError {
+                    code: "generation_comparison_failed".to_owned(),
                     message: error.to_string(),
                     operation_id: None,
                 }),
