@@ -4,6 +4,73 @@ An early-stage, self-hosted control plane for inspecting and eventually managing
 NixOS machines. Nix configuration remains the source of truth. The daemon is
 headless and clients communicate through a versioned HTTP/JSON API.
 
+## Install into a NixOS flake
+
+Add the project as an input in your existing `flake.nix`, import its NixOS
+module, and enable the service for the host you want to inspect. For example:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixos-control = {
+      url = "github:Aidan-Chelig/nix-control-plane";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = { nixpkgs, nixos-control, ... }: {
+    nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ./configuration.nix
+        nixos-control.nixosModules.default
+        {
+          services.nixos-control = {
+            enable = true;
+            configurationPath = "/etc/nixos";
+            host = "my-host";
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
+Merge these additions into your existing inputs and host modules, keeping your
+current nixpkgs input and machine configuration. Replace `my-host` with your
+`nixosConfigurations` attribute name and use your machine's system architecture.
+The imported module selects the package from the project input automatically.
+
+Run these commands from your flake directory to lock the new input and activate
+the service:
+
+```console
+nix flake lock
+sudo nixos-rebuild switch --flake .#my-host
+systemctl status nixos-control
+```
+
+Open the dashboard at `http://127.0.0.1:9834/` or Swagger UI at
+`http://127.0.0.1:9834/swagger-ui/`. To inspect service logs, run
+`journalctl -u nixos-control -f`.
+
+`configurationPath` is the runtime path to the configuration repository; use a
+quoted absolute string so the daemon inspects that directory. The default is
+`"/etc/nixos"`. The service runs with `ProtectHome = true`, so place the
+configuration outside `/home` and ensure it is readable by the service. You can
+instead set `flakeUri = "path:/etc/nixos"` to select an explicit flake; it takes
+precedence over `configurationPath`.
+
+The service listens on loopback by default and the module requires a loopback
+address while authentication is unavailable. For a remote machine, forward the
+port over SSH, then open the same local URLs:
+
+```console
+ssh -N -L 9834:127.0.0.1:9834 user@my-host
+```
+
 ## Development
 
 Enter the repository's development environment before invoking Rust tools:
@@ -112,10 +179,10 @@ paths remain inside `ncp/`; all other definitions remain read-only.
 
 ## NixOS module
 
-Import `nixosModules.default`, set `services.nixos-control.enable = true`, and
-set `services.nixos-control.package` to the flake package when it is not already
-available from your package set. Until authentication lands, the module rejects
-non-loopback listen addresses.
+The module also exposes `services.nixos-control.package`, `port`,
+`listenAddress`, `stateDirectory`, and `commandTimeoutSeconds` for customization.
+See the [flake installation example](#install-into-a-nixos-flake) above to enable
+the service.
 
 See [docs/architecture.md](docs/architecture.md) for component boundaries and
 current security constraints, and
