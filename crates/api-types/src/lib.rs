@@ -4,26 +4,26 @@ use serde::{Deserialize, Serialize};
 
 pub const API_VERSION: &str = "v1";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct HealthResponse {
     pub status: HealthStatus,
     pub api_version: String,
     pub daemon_version: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HealthStatus {
     Ok,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CapabilityResponse {
     pub api_versions: Vec<String>,
     pub capabilities: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SystemSummary {
     pub hostname: String,
     pub nixos_version: Option<String>,
@@ -39,7 +39,7 @@ pub struct SystemSummary {
     pub root_disk_available_bytes: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SystemGeneration {
     pub generation: u64,
     pub system_path: String,
@@ -50,27 +50,27 @@ pub struct SystemGeneration {
     pub bootable: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GenerationCatalog {
     pub total: usize,
     pub generations: Vec<SystemGeneration>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GenerationDetail {
     pub generation: SystemGeneration,
     pub closure_size_bytes: u64,
     pub store_path_count: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct StorePathDelta {
     pub path: String,
     pub name: String,
     pub nar_size_bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GenerationComparison {
     pub from_generation: u64,
     pub to_generation: u64,
@@ -80,7 +80,7 @@ pub struct GenerationComparison {
     pub removed: Vec<StorePathDelta>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigurationKind {
     Flake,
@@ -88,7 +88,7 @@ pub enum ConfigurationKind {
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ConfigurationSummary {
     pub kind: ConfigurationKind,
     pub source: Option<String>,
@@ -97,7 +97,7 @@ pub struct ConfigurationSummary {
     pub has_lock_file: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct FlakeInput {
     pub node: String,
     pub direct: bool,
@@ -111,7 +111,7 @@ pub struct FlakeInput {
     pub last_modified: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct FlakeInputCatalog {
     pub lock_file: String,
     pub version: Option<u64>,
@@ -120,7 +120,7 @@ pub struct FlakeInputCatalog {
     pub inputs: Vec<FlakeInput>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RepositoryStatus {
     pub root: String,
     pub branch: Option<String>,
@@ -135,7 +135,7 @@ pub struct RepositoryStatus {
     pub dirty: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedConfigurationMode {
     Unmanaged,
@@ -143,7 +143,7 @@ pub enum ManagedConfigurationMode {
     ControlPlaneManaged,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ManagedConfigurationSummary {
     pub repository_root: Option<String>,
     pub managed_directory: Option<String>,
@@ -155,7 +155,7 @@ pub struct ManagedConfigurationSummary {
     pub definitions_editable: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct OptionSummary {
     pub name: String,
     pub description: Option<String>,
@@ -166,7 +166,7 @@ pub struct OptionSummary {
     pub current_value: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct OptionDetail {
     pub name: String,
     pub description: Option<String>,
@@ -178,7 +178,7 @@ pub struct OptionDetail {
     pub example: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ServiceSummary {
     pub name: String,
     pub enabled: Option<bool>,
@@ -186,7 +186,7 @@ pub struct ServiceSummary {
     pub declarations: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ServiceCatalog {
     pub host: String,
     pub total: usize,
@@ -194,14 +194,14 @@ pub struct ServiceCatalog {
     pub services: Vec<ServiceSummary>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ServiceDetail {
     pub name: String,
     pub options: Vec<OptionSummary>,
     pub systemd_units: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RuntimeService {
     pub unit: String,
     pub description: String,
@@ -210,21 +210,21 @@ pub struct RuntimeService {
     pub sub_state: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RuntimeServiceCatalog {
     pub total: usize,
     pub failed: usize,
     pub services: Vec<RuntimeService>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct OptionCatalog {
     pub host: String,
     pub total: usize,
     pub options: Vec<OptionSummary>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SystemPackage {
     pub name: String,
     pub version: Option<String>,
@@ -233,7 +233,7 @@ pub struct SystemPackage {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PackageCatalog {
     pub host: String,
     pub total: usize,
@@ -241,7 +241,7 @@ pub struct PackageCatalog {
     pub sources: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ApiError {
     pub code: String,
     pub message: String,

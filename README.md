@@ -42,6 +42,11 @@ The web dashboard and API listen on `127.0.0.1:9834` by default. Open
 - `GET /api/v1/services/{service}`
 - `GET /api/v1/runtime/services`
 
+Interactive API documentation is available at
+`http://127.0.0.1:9834/swagger-ui/`, with generated OpenAPI JSON at
+`/api-doc/openapi.json`. Swagger UI assets are embedded in the daemon, so the
+documentation works offline. Use **Try it out** to call the local API.
+
 The overview reports the active NixOS generation, kernel, uptime, logical CPU
 count and load averages, memory availability, and root filesystem capacity.
 The Generations page lists installed system profile generations newest-first and

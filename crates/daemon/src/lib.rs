@@ -1,3 +1,5 @@
+mod openapi;
+
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
@@ -78,6 +80,10 @@ pub fn router(config: DaemonConfig) -> Router {
         .route("/api/v1/services", get(service_catalog))
         .route("/api/v1/services/{service}", get(service_detail))
         .route("/api/v1/runtime/services", get(runtime_services))
+        .merge(utoipa_swagger_ui::SwaggerUi::new("/swagger-ui").url(
+            "/api-doc/openapi.json",
+            <openapi::ApiDoc as utoipa::OpenApi>::openapi(),
+        ))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(tower_http::request_id::SetRequestIdLayer::new(
@@ -288,6 +294,11 @@ async fn render_page(state: AppState, page: nixos_control_ui::DashboardPage) -> 
     ))
 }
 
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses((status = 200, description = "Successful response", body = HealthResponse))
+)]
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: HealthStatus::Ok,
@@ -296,6 +307,11 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api",
+    responses((status = 200, description = "Successful response", body = CapabilityResponse))
+)]
 async fn capabilities() -> Json<CapabilityResponse> {
     Json(CapabilityResponse {
         api_versions: vec![API_VERSION.to_owned()],
@@ -314,14 +330,33 @@ async fn capabilities() -> Json<CapabilityResponse> {
     })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/system/summary",
+    responses((status = 200, description = "Successful response", body = SystemSummary))
+)]
 async fn system_summary(State(state): State<AppState>) -> Json<SystemSummary> {
     Json(state.control_plane.system_summary().await)
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/generations",
+    responses((status = 200, description = "Successful response", body = GenerationCatalog))
+)]
 async fn generations(State(state): State<AppState>) -> Json<GenerationCatalog> {
     Json(state.control_plane.generations())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/generations/{generation}",
+    params(("generation" = u64, Path, description = "generation identifier")),
+    responses((status = 200, description = "Successful response", body = GenerationDetail),
+        (status = 404, description = "Generation not found", body = ApiError),
+        (status = 503, description = "System inspection unavailable", body = ApiError),
+        (status = 400, description = "Malformed path or query parameter", content_type = "text/plain", body = String))
+)]
 async fn generation_detail(
     State(state): State<AppState>,
     Path(generation): Path<u64>,
@@ -348,6 +383,16 @@ async fn generation_detail(
         })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/generations/{from}/compare/{to}",
+    params(("from" = u64, Path, description = "from identifier"),
+        ("to" = u64, Path, description = "to identifier")),
+    responses((status = 200, description = "Successful response", body = GenerationComparison),
+        (status = 404, description = "Generation not found", body = ApiError),
+        (status = 503, description = "System inspection unavailable", body = ApiError),
+        (status = 400, description = "Malformed path or query parameter", content_type = "text/plain", body = String))
+)]
 async fn generation_comparison(
     State(state): State<AppState>,
     Path((from, to)): Path<(u64, u64)>,
@@ -374,10 +419,21 @@ async fn generation_comparison(
         })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/configuration",
+    responses((status = 200, description = "Successful response", body = ConfigurationSummary))
+)]
 async fn configuration_summary(State(state): State<AppState>) -> Json<ConfigurationSummary> {
     Json(state.control_plane.configuration_summary())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/flake/inputs",
+    responses((status = 200, description = "Successful response", body = FlakeInputCatalog),
+        (status = 422, description = "Configuration inspection or evaluation failed", body = ApiError))
+)]
 async fn flake_inputs(
     State(state): State<AppState>,
 ) -> Result<Json<FlakeInputCatalog>, (StatusCode, Json<ApiError>)> {
@@ -397,6 +453,12 @@ async fn flake_inputs(
         })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/repository/status",
+    responses((status = 200, description = "Successful response", body = RepositoryStatus),
+        (status = 422, description = "Configuration inspection or evaluation failed", body = ApiError))
+)]
 async fn repository_status(
     State(state): State<AppState>,
 ) -> Result<Json<RepositoryStatus>, (StatusCode, Json<ApiError>)> {
@@ -417,12 +479,27 @@ async fn repository_status(
         })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/configuration/managed",
+    responses((status = 200, description = "Successful response", body = ManagedConfigurationSummary))
+)]
 async fn managed_configuration_summary(
     State(state): State<AppState>,
 ) -> Json<ManagedConfigurationSummary> {
     Json(state.control_plane.managed_configuration_summary())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/options",
+    params(("search" = Option<String>, Query, description = "Case-insensitive substring filter; whitespace is trimmed"),
+        ("q" = Option<String>, Query, description = "Alias for search; use only one of search or q"),
+        ("limit" = Option<usize>, Query, description = "Defaults to 100; values above 500 are capped", minimum = 0, example = 100)),
+    responses((status = 200, description = "Successful response", body = OptionCatalog),
+        (status = 422, description = "Configuration inspection or evaluation failed", body = ApiError),
+        (status = 400, description = "Malformed path or query parameter", content_type = "text/plain", body = String))
+)]
 async fn option_catalog(
     State(state): State<AppState>,
     Query(query): Query<CatalogQuery>,
@@ -470,6 +547,17 @@ fn filter_catalog(mut catalog: OptionCatalog, search: &str, limit: usize) -> Opt
     catalog
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/packages",
+    params(("search" = Option<String>, Query, description = "Case-insensitive substring filter; whitespace is trimmed"),
+        ("q" = Option<String>, Query, description = "Alias for search; use only one of search or q"),
+        ("limit" = Option<usize>, Query, description = "Defaults to 100; values above 500 are capped", minimum = 0, example = 100),
+        ("source" = Option<String>, Query, description = "Exact package source input filter")),
+    responses((status = 200, description = "Successful response", body = PackageCatalog),
+        (status = 422, description = "Configuration inspection or evaluation failed", body = ApiError),
+        (status = 400, description = "Malformed path or query parameter", content_type = "text/plain", body = String))
+)]
 async fn package_catalog(
     State(state): State<AppState>,
     Query(query): Query<CatalogQuery>,
@@ -498,6 +586,14 @@ async fn package_catalog(
         })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/options/{option}",
+    params(("option" = String, Path, description = "option identifier")),
+    responses((status = 200, description = "Successful response", body = OptionDetail),
+        (status = 400, description = "Invalid resource name", body = ApiError),
+        (status = 422, description = "Configuration inspection or evaluation failed", body = ApiError))
+)]
 async fn option_detail(
     State(state): State<AppState>,
     Path(option): Path<String>,
@@ -551,6 +647,16 @@ fn filter_packages(
     catalog
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/services",
+    params(("search" = Option<String>, Query, description = "Case-insensitive substring filter; whitespace is trimmed"),
+        ("q" = Option<String>, Query, description = "Alias for search; use only one of search or q"),
+        ("limit" = Option<usize>, Query, description = "Defaults to 100; values above 500 are capped", minimum = 0, example = 100)),
+    responses((status = 200, description = "Successful response", body = ServiceCatalog),
+        (status = 422, description = "Configuration inspection or evaluation failed", body = ApiError),
+        (status = 400, description = "Malformed path or query parameter", content_type = "text/plain", body = String))
+)]
 async fn service_catalog(
     State(state): State<AppState>,
     Query(query): Query<CatalogQuery>,
@@ -578,6 +684,14 @@ async fn service_catalog(
         })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/services/{service}",
+    params(("service" = String, Path, description = "service identifier")),
+    responses((status = 200, description = "Successful response", body = ServiceDetail),
+        (status = 400, description = "Invalid resource name", body = ApiError),
+        (status = 422, description = "Configuration inspection or evaluation failed", body = ApiError))
+)]
 async fn service_detail(
     State(state): State<AppState>,
     Path(service): Path<String>,
@@ -643,6 +757,16 @@ fn filter_services(mut catalog: ServiceCatalog, search: &str, limit: usize) -> S
     catalog
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/runtime/services",
+    params(("search" = Option<String>, Query, description = "Case-insensitive substring filter; whitespace is trimmed"),
+        ("q" = Option<String>, Query, description = "Alias for search; use only one of search or q"),
+        ("limit" = Option<usize>, Query, description = "Defaults to 100; values above 500 are capped", minimum = 0, example = 100)),
+    responses((status = 200, description = "Successful response", body = RuntimeServiceCatalog),
+        (status = 503, description = "System inspection unavailable", body = ApiError),
+        (status = 400, description = "Malformed path or query parameter", content_type = "text/plain", body = String))
+)]
 async fn runtime_services(
     State(state): State<AppState>,
     Query(query): Query<CatalogQuery>,
@@ -704,6 +828,64 @@ mod tests {
     };
     use std::time::Duration;
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn openapi_documents_api_routes_and_wire_types() {
+        let response = router(DaemonConfig::default())
+            .oneshot(
+                Request::get("/api-doc/openapi.json")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 256 * 1024)
+            .await
+            .unwrap();
+        let spec: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(spec["openapi"], "3.1.0");
+        assert_eq!(spec["paths"].as_object().unwrap().len(), 16);
+        assert_eq!(
+            spec["components"]["schemas"]["HealthStatus"]["enum"][0],
+            "ok"
+        );
+        assert!(
+            spec["paths"]["/api/v1/generations/{generation}"]["get"]["responses"]["404"]
+                .is_object()
+        );
+        let parameters = spec["paths"]["/api/v1/packages"]["get"]["parameters"]
+            .as_array()
+            .unwrap();
+        for name in ["search", "q", "limit", "source"] {
+            assert!(parameters.iter().any(|parameter| parameter["name"] == name));
+        }
+    }
+
+    #[tokio::test]
+    async fn swagger_ui_and_embedded_assets_are_available() {
+        for (path, content) in [
+            ("/swagger-ui/", "swagger-ui-bundle.js"),
+            ("/swagger-ui/swagger-ui-bundle.js", "SwaggerUIBundle"),
+            (
+                "/swagger-ui/swagger-initializer.js",
+                "/api-doc/openapi.json",
+            ),
+        ] {
+            let response = router(DaemonConfig::default())
+                .oneshot(Request::get(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{path}");
+            let bytes = axum::body::to_bytes(response.into_body(), 4 * 1024 * 1024)
+                .await
+                .unwrap();
+            assert!(
+                String::from_utf8(bytes.to_vec()).unwrap().contains(content),
+                "{path}"
+            );
+        }
+    }
 
     #[tokio::test]
     async fn health_reports_versioned_api() {
